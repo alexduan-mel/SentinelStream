@@ -24,6 +24,7 @@ jobs:
           runtime: 'python39'
           entry_point: 'gcf_handler'
           region: 'australia-southeast1' 
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
           env_vars: |
             SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}
  

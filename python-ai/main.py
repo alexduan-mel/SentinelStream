@@ -98,9 +98,46 @@ class SlackNotifier:
         
         return self.send_message(text, blocks)
 
+    def test_message(self):
+        """Send a test message to Slack."""
+        return self.send_message("🚀 SentinelStream: Test message from GCF")
 
-if __name__ == "__main__":
-    # Simple test - send one message
-    notifier = SlackNotifier()
-    success = notifier.send_message("🚀 SentinelStream: Test message from crontab")
-    exit(0 if success else 1)
+
+def gcf_handler(request):
+    """
+    Google Cloud Functions entry point.
+    
+    Args:
+        request: Flask request object
+        
+    Returns:
+        Tuple of (response_body, status_code)
+    """
+    try:
+        notifier = SlackNotifier()
+        
+        # Get message from request if provided
+        request_json = request.get_json(silent=True)
+        if request_json and 'message' in request_json:
+            message = request_json['message']
+        else:
+            message = "🚀 SentinelStream: Test message from GCF"
+        
+        # Send message to Slack
+        success = notifier.send_message(message)
+        
+        if success:
+            return ('Message sent to Slack successfully', 200)
+        else:
+            return ('Failed to send message to Slack', 500)
+            
+    except Exception as e:
+        logger.error(f"GCF handler error: {e}")
+        return (f'Error: {str(e)}', 500)
+
+
+# if __name__ == "__main__":
+#     # Simple test - send one message
+#     notifier = SlackNotifier()
+#     success = notifier.send_message("🚀 SentinelStream: Test message from crontab")
+#     exit(0 if success else 1)
