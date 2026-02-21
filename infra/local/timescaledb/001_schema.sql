@@ -60,7 +60,93 @@ CREATE INDEX IF NOT EXISTS idx_news_source ON news_events (source);
 CREATE INDEX IF NOT EXISTS idx_news_tickers_gin ON news_events USING GIN (tickers);
 
 -- ------------------------------------------------------
--- 3) LLM analyses (structured output + raw output)
+-- 3) Raw news items (staging for replayable normalization)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS raw_news_items (
+  raw_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source       TEXT NOT NULL,                 -- provider name (e.g., finnhub)
+  trace_id     UUID NOT NULL,                 -- correlation ID for the fetch run
+  fetched_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- time the raw payload was fetched
+
+  published_at TIMESTAMPTZ NULL,              -- optional published time if available
+  url          TEXT NULL,                     -- optional url if available
+  title        TEXT NULL,                     -- optional title if available
+
+  dedup_key    TEXT NOT NULL,                 -- deterministic key (e.g., sha256(source|url))
+  status       TEXT NOT NULL DEFAULT 'fetched' CHECK (status IN ('fetched','normalized','failed')),
+  attempts     INTEGER NOT NULL DEFAULT 0,    -- number of normalization attempts
+  last_error   TEXT NULL,                     -- last error message if normalization failed
+
+  raw_payload  JSONB NOT NULL,
+
+  CONSTRAINT uq_raw_news_source_dedup UNIQUE (source, dedup_key)
+);
+
+COMMENT ON TABLE raw_news_items IS 'Raw news payloads staged for replayable normalization';
+COMMENT ON COLUMN raw_news_items.raw_id IS 'Unique id for a raw news payload';
+COMMENT ON COLUMN raw_news_items.source IS 'Provider name (e.g., finnhub)';
+COMMENT ON COLUMN raw_news_items.trace_id IS 'Correlation id for a single fetch run';
+COMMENT ON COLUMN raw_news_items.fetched_at IS 'Time the raw payload was fetched';
+COMMENT ON COLUMN raw_news_items.published_at IS 'Published time from provider if available';
+COMMENT ON COLUMN raw_news_items.url IS 'Article URL if available';
+COMMENT ON COLUMN raw_news_items.title IS 'Article title if available';
+COMMENT ON COLUMN raw_news_items.dedup_key IS 'Deterministic key for deduplication (e.g., sha256(source|url))';
+COMMENT ON COLUMN raw_news_items.status IS 'Processing status: fetched | normalized | failed';
+COMMENT ON COLUMN raw_news_items.attempts IS 'Number of normalization attempts';
+COMMENT ON COLUMN raw_news_items.last_error IS 'Last error message for failed normalization';
+COMMENT ON COLUMN raw_news_items.raw_payload IS 'Raw provider payload stored for replay/debugging';
+
+CREATE INDEX IF NOT EXISTS idx_raw_news_status_fetched_at
+  ON raw_news_items (status, fetched_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_raw_news_fetched_at
+  ON raw_news_items (fetched_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_raw_news_payload_gin
+  ON raw_news_items USING GIN (raw_payload);
+
+-- ------------------------------------------------------
+-- 4) Analysis jobs (DB-backed work queue)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS analysis_jobs (
+  job_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  news_id     TEXT NOT NULL REFERENCES news_events(news_id) ON DELETE CASCADE,
+  trace_id    UUID NOT NULL,
+  job_type    TEXT NOT NULL, -- e.g., llm_analysis, fetch_content
+  status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','done','failed')),
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  next_run_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  locked_at   TIMESTAMPTZ NULL,
+  locked_by   TEXT NULL,
+  last_error  TEXT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT uq_analysis_jobs_news_type UNIQUE (news_id, job_type)
+);
+
+COMMENT ON TABLE analysis_jobs IS 'DB-backed job queue for async processing';
+COMMENT ON COLUMN analysis_jobs.job_id IS 'Unique id for a job';
+COMMENT ON COLUMN analysis_jobs.news_id IS 'News event id to process';
+COMMENT ON COLUMN analysis_jobs.trace_id IS 'Correlation id for publishing this job';
+COMMENT ON COLUMN analysis_jobs.job_type IS 'Job type (e.g., llm_analysis, fetch_content)';
+COMMENT ON COLUMN analysis_jobs.status IS 'Job status: pending | running | done | failed';
+COMMENT ON COLUMN analysis_jobs.attempts IS 'Number of processing attempts';
+COMMENT ON COLUMN analysis_jobs.next_run_at IS 'Earliest time this job should be run';
+COMMENT ON COLUMN analysis_jobs.locked_at IS 'Time the job was locked for processing';
+COMMENT ON COLUMN analysis_jobs.locked_by IS 'Worker identifier holding the lock';
+COMMENT ON COLUMN analysis_jobs.last_error IS 'Last error message from processing';
+COMMENT ON COLUMN analysis_jobs.created_at IS 'Time the job was created';
+COMMENT ON COLUMN analysis_jobs.updated_at IS 'Time the job was last updated';
+
+CREATE INDEX IF NOT EXISTS idx_analysis_jobs_status_next_run
+  ON analysis_jobs (status, next_run_at);
+
+CREATE INDEX IF NOT EXISTS idx_analysis_jobs_created_at
+  ON analysis_jobs (created_at);
+
+-- ------------------------------------------------------
+-- 5) LLM analyses (structured output + raw output)
 -- ------------------------------------------------------
 CREATE TABLE IF NOT EXISTS llm_analyses (
   analysis_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),

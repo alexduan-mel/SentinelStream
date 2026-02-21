@@ -2,7 +2,7 @@
 set -eu
 
 usage() {
-  echo "Usage: $0 <up|down|logs|ps>" >&2
+  echo "Usage: $0 <up|down|down-v|logs|ps>" >&2
   exit 1
 }
 
@@ -13,6 +13,9 @@ case "$cmd" in
     ;;
   down)
     docker compose down
+    ;;
+  down-v)
+    docker compose down -v
     ;;
   logs)
     docker compose logs -f

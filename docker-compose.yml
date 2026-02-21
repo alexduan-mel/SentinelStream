@@ -20,14 +20,14 @@ services:
   timescaledb:
     image: timescale/timescaledb:latest-pg14
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-sentinel}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     ports:
       - "5433:5432"
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
-      - ./infra/local/timescaledb/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql
+      - ./infra/local/timescaledb:/docker-entrypoint-initdb.d
 
   redis:
     image: redis:7-alpine
@@ -39,6 +39,8 @@ services:
   python-ai:
     build:
       context: services/python-ai
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     depends_on:
