@@ -62,9 +62,17 @@ class AnalysisResult(BaseModel):
 
 
 @dataclass(frozen=True)
+class LLMProviderResponse:
+    output_text: str
+    response: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
 class LLMRunAttempt:
     prompt: str
-    output: str | None
+    output_text: str | None
+    output_json: dict[str, Any] | None
+    response: dict[str, Any] | None
     error: str | None
 
 
@@ -72,7 +80,7 @@ class LLMProvider(Protocol):
     name: str
     model: str
 
-    def generate(self, prompt: str, timeout_seconds: int) -> str:
+    def generate(self, prompt: str, timeout_seconds: int) -> LLMProviderResponse:
         ...
 
 
@@ -112,11 +120,11 @@ def build_retry_prompt(input_text: str) -> str:
     )
 
 
-def parse_analysis_json(text: str) -> AnalysisResult:
+def parse_analysis_json(text: str) -> tuple[AnalysisResult, dict[str, Any]]:
     payload = json.loads(text)
     if not isinstance(payload, dict):
         raise ValueError("JSON root must be an object")
-    return AnalysisResult.model_validate(payload)
+    return AnalysisResult.model_validate(payload), payload
 
 
 class LLMClient:
@@ -125,6 +133,8 @@ class LLMClient:
         self._timeout_seconds = timeout_seconds
         self._max_retries = max_retries
         self.last_attempts: list[LLMRunAttempt] = []
+        self.last_request: dict[str, Any] | None = None
+        self.last_raw_output: dict[str, Any] | None = None
 
     @property
     def provider_name(self) -> str:
@@ -136,6 +146,8 @@ class LLMClient:
 
     def analyze_news(self, input_text: str) -> AnalysisResult:
         self.last_attempts = []
+        self.last_request = None
+        self.last_raw_output = None
         prompts: Iterable[str] = [build_prompt(input_text)]
         retry_prompt = build_retry_prompt(input_text)
         logger = logging.getLogger(__name__)
@@ -144,7 +156,18 @@ class LLMClient:
             if attempt > 0:
                 time.sleep(2)
             prompt = prompts[0] if attempt == 0 else retry_prompt
-            output: str | None = None
+            self.last_request = {
+                "prompt": prompt,
+                "provider": self.provider_name,
+                "model": self.model,
+                "timeout_seconds": self._timeout_seconds,
+                "max_retries": self._max_retries,
+                "temperature": None,
+                "max_tokens": None,
+            }
+            output_text: str | None = None
+            output_json: dict[str, Any] | None = None
+            response_payload: dict[str, Any] | None = None
             error: str | None = None
             try:
                 logger.info(
@@ -153,9 +176,25 @@ class LLMClient:
                     self.model,
                     attempt + 1,
                 )
-                output = self._provider.generate(prompt, self._timeout_seconds)
-                result = parse_analysis_json(output)
-                self.last_attempts.append(LLMRunAttempt(prompt=prompt, output=output, error=None))
+                provider_response = self._provider.generate(prompt, self._timeout_seconds)
+                output_text = provider_response.output_text
+                response_payload = provider_response.response
+                result, output_json = parse_analysis_json(output_text)
+                self.last_attempts.append(
+                    LLMRunAttempt(
+                        prompt=prompt,
+                        output_text=output_text,
+                        output_json=output_json,
+                        response=response_payload,
+                        error=None,
+                    )
+                )
+                self.last_raw_output = {
+                    "error": None,
+                    "response": response_payload,
+                    "output_text": output_text,
+                    "output_json": output_json,
+                }
                 logger.info(
                     "llm_attempt_success provider=%s model=%s attempt=%s",
                     self.provider_name,
@@ -165,14 +204,22 @@ class LLMClient:
                 return result
             except ProviderError as exc:
                 error = f"provider_error:{exc.code}:{exc}" if exc.code else f"provider_error:{exc}"
-                self.last_attempts.append(LLMRunAttempt(prompt=prompt, output=output, error=error))
+                self.last_attempts.append(
+                    LLMRunAttempt(
+                        prompt=prompt,
+                        output_text=output_text,
+                        output_json=None,
+                        response=response_payload,
+                        error=error,
+                    )
+                )
                 logger.warning(
                     "llm_attempt_failed provider=%s model=%s attempt=%s error=%s output_snippet=%s",
                     self.provider_name,
                     self.model,
                     attempt + 1,
                     error,
-                    (output or "")[:200],
+                    (output_text or "")[:200],
                 )
                 if exc.code == "insufficient_quota":
                     raise LLMAnalysisError("LLM analysis failed", self.last_attempts)
@@ -182,14 +229,22 @@ class LLMClient:
             except Exception as exc:  # noqa: BLE001
                 error = f"provider_error: {exc}"
 
-            self.last_attempts.append(LLMRunAttempt(prompt=prompt, output=output, error=error))
+            self.last_attempts.append(
+                LLMRunAttempt(
+                    prompt=prompt,
+                    output_text=output_text,
+                    output_json=output_json,
+                    response=response_payload,
+                    error=error,
+                )
+            )
             logger.warning(
                 "llm_attempt_failed provider=%s model=%s attempt=%s error=%s output_snippet=%s",
                 self.provider_name,
                 self.model,
                 attempt + 1,
                 error,
-                (output or "")[:200],
+                (output_text or "")[:200],
             )
 
         raise LLMAnalysisError("LLM analysis failed", self.last_attempts)

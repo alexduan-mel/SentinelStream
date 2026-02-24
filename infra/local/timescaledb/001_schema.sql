@@ -4,6 +4,7 @@
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+ALTER DATABASE sentinel SET timezone = 'UTC';
 
 -- ----------------------------
 -- 1) Tickers (dimension table)
@@ -174,6 +175,7 @@ CREATE TABLE IF NOT EXISTS llm_analyses (
 
   provider        TEXT NOT NULL,          -- openai / gemini
   model           TEXT NOT NULL,          -- exact model name
+  request         JSONB NULL,             -- request payload (prompt/messages + params)
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   status          TEXT NOT NULL DEFAULT 'pending'
@@ -191,7 +193,7 @@ CREATE TABLE IF NOT EXISTS llm_analyses (
   raw_output      JSONB,                               -- raw model output
 
   CONSTRAINT uq_analysis_uuid UNIQUE (analysis_uuid),
-  CONSTRAINT uq_analysis_news_event UNIQUE (news_event_id)
+  CONSTRAINT uq_analysis_unique_model UNIQUE (news_event_id, provider, model)
 );
 
 COMMENT ON TABLE llm_analyses IS 'LLM analysis results (raw output + parsed fields)';
@@ -201,17 +203,21 @@ COMMENT ON COLUMN llm_analyses.news_event_id IS 'FK to news_events.id';
 COMMENT ON COLUMN llm_analyses.trace_id IS 'Correlation ID for the processing run';
 COMMENT ON COLUMN llm_analyses.provider IS 'LLM provider name';
 COMMENT ON COLUMN llm_analyses.model IS 'Exact model identifier';
+COMMENT ON COLUMN llm_analyses.request IS 'Request payload sent to the LLM';
 COMMENT ON COLUMN llm_analyses.status IS 'pending | succeeded | failed';
 COMMENT ON COLUMN llm_analyses.error_message IS 'Last error message for failed analysis';
 COMMENT ON COLUMN llm_analyses.sentiment IS 'positive | negative | neutral';
 COMMENT ON COLUMN llm_analyses.confidence IS 'Overall confidence in [0,1]';
 COMMENT ON COLUMN llm_analyses.impact_score IS 'Optional impact score in [0,1]';
 COMMENT ON COLUMN llm_analyses.entities IS 'Extracted entities/tickers as JSON array';
-COMMENT ON COLUMN llm_analyses.raw_output IS 'Raw model output for debugging/replay';
+COMMENT ON COLUMN llm_analyses.raw_output IS 'Normalized raw output object for debugging/replay';
 
-CREATE INDEX IF NOT EXISTS idx_analysis_news_event_id ON llm_analyses (news_event_id);
+CREATE INDEX IF NOT EXISTS idx_analysis_news_event_created_at
+  ON llm_analyses (news_event_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_analysis_created_at ON llm_analyses (created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_analysis_sentiment ON llm_analyses (sentiment);
+CREATE INDEX IF NOT EXISTS idx_analysis_sentiment_created_at
+  ON llm_analyses (sentiment, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analysis_trace_id ON llm_analyses (trace_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_entities_gin ON llm_analyses USING GIN (entities);
 
 -- ------------------------------------------------------

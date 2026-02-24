@@ -8,7 +8,7 @@ import psycopg2
 import pytest
 
 from jobs import worker
-from llm.interface import LLMClient, ProviderError
+from llm.interface import LLMClient, LLMProviderResponse, ProviderError
 import analysis.service as analysis_service
 
 
@@ -19,11 +19,11 @@ class FakeProvider:
     def __init__(self, outputs):
         self._outputs = list(outputs)
 
-    def generate(self, prompt: str, timeout_seconds: int) -> str:
+    def generate(self, prompt: str, timeout_seconds: int) -> LLMProviderResponse:
         next_item = self._outputs.pop(0)
         if isinstance(next_item, Exception):
             raise next_item
-        return next_item
+        return LLMProviderResponse(output_text=next_item, response=None)
 
 
 def _db_conn():
@@ -81,7 +81,8 @@ def _fetch_analysis(conn, news_event_id: int):
     with conn.cursor() as cursor:
         cursor.execute(
             "SELECT status, sentiment, confidence, summary, error_message, raw_output, id "
-            "FROM llm_analyses WHERE news_event_id = %s",
+            "FROM llm_analyses WHERE news_event_id = %s "
+            "ORDER BY created_at DESC LIMIT 1",
             (news_event_id,),
         )
         return cursor.fetchone()
@@ -144,8 +145,9 @@ def test_happy_path(monkeypatch):
         assert row[3] == "Strong demand."
         raw_output = row[5]
         analysis_id = row[6]
-        assert isinstance(raw_output, list)
-        assert len(raw_output) == 1
+        assert isinstance(raw_output, dict)
+        assert raw_output["error"] is None
+        assert raw_output["output_json"]["tickers"] == ["AAPL", "MSFT"]
         assert _fetch_analysis_tickers(conn, analysis_id) == ["AAPL", "MSFT"]
         assert _fetch_job_status(conn, news_event_id) == "done"
         _cleanup(conn, news_event_id)
@@ -164,8 +166,8 @@ def test_invalid_json_retries_and_fails(monkeypatch):
         assert row[0] == "failed"
         assert row[4]
         raw_output = row[5]
-        assert isinstance(raw_output, list)
-        assert len(raw_output) == 3
+        assert isinstance(raw_output, dict)
+        assert raw_output["error"]
         assert _fetch_job_status(conn, news_event_id) == "failed"
         _cleanup(conn, news_event_id)
 
@@ -183,8 +185,8 @@ def test_schema_validation_retries_and_fails(monkeypatch):
         row = _fetch_analysis(conn, news_event_id)
         assert row[0] == "failed"
         raw_output = row[5]
-        assert isinstance(raw_output, list)
-        assert len(raw_output) == 3
+        assert isinstance(raw_output, dict)
+        assert raw_output["error"]
         assert _fetch_job_status(conn, news_event_id) == "failed"
         _cleanup(conn, news_event_id)
 
@@ -201,8 +203,8 @@ def test_timeout_retries_and_fails(monkeypatch):
         row = _fetch_analysis(conn, news_event_id)
         assert row[0] == "failed"
         raw_output = row[5]
-        assert isinstance(raw_output, list)
-        assert len(raw_output) == 3
+        assert isinstance(raw_output, dict)
+        assert raw_output["error"]
         assert _fetch_job_status(conn, news_event_id) == "failed"
         _cleanup(conn, news_event_id)
 
@@ -219,7 +221,7 @@ def test_non_retryable_error(monkeypatch):
         row = _fetch_analysis(conn, news_event_id)
         assert row[0] == "failed"
         raw_output = row[5]
-        assert isinstance(raw_output, list)
-        assert len(raw_output) == 1
+        assert isinstance(raw_output, dict)
+        assert raw_output["error"]
         assert _fetch_job_status(conn, news_event_id) == "failed"
         _cleanup(conn, news_event_id)

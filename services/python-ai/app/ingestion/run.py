@@ -68,13 +68,17 @@ def _connect_db():
     }.items() if not value]
     if missing:
         raise SystemExit(f"Missing DB environment variables: {', '.join(missing)}")
-    return psycopg2.connect(
+    conn = psycopg2.connect(
         host=host,
         port=port,
         dbname=name,
         user=user,
         password=password,
     )
+    with conn.cursor() as cursor:
+        cursor.execute("SET TIME ZONE 'UTC'")
+    conn.commit()
+    return conn
 
 
 def _fetch_ticker_symbols(conn, symbols: list[str] | None) -> list[str]:
