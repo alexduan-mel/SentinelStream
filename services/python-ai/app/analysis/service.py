@@ -9,7 +9,7 @@ import psycopg2
 from psycopg2.extras import Json, execute_values
 
 from llm.factory import load_llm_client
-from llm.interface import LLMAnalysisError, LLMClient
+from llm.interface import LLMAnalysisError, LLMClient, LLMRunAttempt
 
 
 def connect_db():
@@ -26,13 +26,17 @@ def connect_db():
     }.items() if not value]
     if missing:
         raise RuntimeError(f"Missing DB environment variables: {', '.join(missing)}")
-    return psycopg2.connect(
+    conn = psycopg2.connect(
         host=host,
         port=port,
         dbname=name,
         user=user,
         password=password,
     )
+    with conn.cursor() as cursor:
+        cursor.execute("SET TIME ZONE 'UTC'")
+    conn.commit()
+    return conn
 
 
 def _fetch_news_event(conn, news_event_id: int) -> dict[str, Any] | None:
@@ -70,17 +74,27 @@ def _upsert_analysis_pending(
     trace_id: str,
     provider: str,
     model: str,
+    request_payload: dict[str, Any] | None,
 ) -> int:
     sql = (
-        "INSERT INTO llm_analyses (news_event_id, trace_id, provider, model, status, created_at, updated_at) "
-        "VALUES (%s, %s, %s, %s, 'pending', NOW(), NOW()) "
-        "ON CONFLICT (news_event_id) DO UPDATE SET "
-        "trace_id = EXCLUDED.trace_id, provider = EXCLUDED.provider, model = EXCLUDED.model, "
-        "status = 'pending', error_message = NULL, updated_at = NOW() "
+        "INSERT INTO llm_analyses (news_event_id, trace_id, provider, model, request, status, created_at, updated_at) "
+        "VALUES (%s, %s, %s, %s, %s, 'pending', NOW(), NOW()) "
+        "ON CONFLICT (news_event_id, provider, model) DO UPDATE SET "
+        "trace_id = EXCLUDED.trace_id, status = 'pending', error_message = NULL, "
+        "request = EXCLUDED.request, updated_at = NOW() "
         "RETURNING id"
     )
     with conn.cursor() as cursor:
-        cursor.execute(sql, (news_event_id, trace_id, provider, model))
+        cursor.execute(
+            sql,
+            (
+                news_event_id,
+                trace_id,
+                provider,
+                model,
+                Json(request_payload) if request_payload is not None else None,
+            ),
+        )
         analysis_id = cursor.fetchone()[0]
     conn.commit()
     return analysis_id
@@ -90,12 +104,13 @@ def _update_analysis_success(
     conn,
     analysis_id: int,
     result,
-    raw_output: list[dict[str, Any]],
+    raw_output: dict[str, Any],
+    request_payload: dict[str, Any] | None,
 ) -> None:
     sql = (
         "UPDATE llm_analyses SET status = 'succeeded', updated_at = NOW(), "
         "sentiment = %s, confidence = %s, summary = %s, error_message = NULL, "
-        "raw_output = %s, entities = %s "
+        "raw_output = %s, entities = %s, request = %s "
         "WHERE id = %s"
     )
     with conn.cursor() as cursor:
@@ -107,6 +122,7 @@ def _update_analysis_success(
                 result.reasoning_summary,
                 Json(raw_output),
                 Json(result.tickers),
+                Json(request_payload) if request_payload is not None else None,
                 analysis_id,
             ),
         )
@@ -117,16 +133,41 @@ def _update_analysis_failed(
     conn,
     analysis_id: int,
     error_message: str,
-    raw_output: list[dict[str, Any]],
+    raw_output: dict[str, Any],
+    request_payload: dict[str, Any] | None,
 ) -> None:
     sql = (
         "UPDATE llm_analyses SET status = 'failed', updated_at = NOW(), "
-        "error_message = %s, raw_output = %s "
+        "error_message = %s, raw_output = %s, request = %s "
         "WHERE id = %s"
     )
     with conn.cursor() as cursor:
-        cursor.execute(sql, (error_message, Json(raw_output), analysis_id))
+        cursor.execute(
+            sql,
+            (
+                error_message,
+                Json(raw_output),
+                Json(request_payload) if request_payload is not None else None,
+                analysis_id,
+            ),
+        )
     conn.commit()
+
+
+def _build_raw_output(attempt: LLMRunAttempt | None) -> dict[str, Any]:
+    if not attempt:
+        return {
+            "error": "no_attempts",
+            "response": None,
+            "output_text": None,
+            "output_json": None,
+        }
+    return {
+        "error": attempt.error,
+        "response": attempt.response,
+        "output_text": attempt.output_text,
+        "output_json": attempt.output_json,
+    }
 
 
 def _replace_analysis_tickers(conn, analysis_id: int, tickers: list[str]) -> None:
@@ -167,8 +208,15 @@ def analyze_news_event(news_event_id: int) -> dict[str, Any]:
                 trace_id=trace_id,
                 provider=provider,
                 model=model,
+                request_payload=None,
             )
-            _update_analysis_failed(conn, analysis_id, f"llm_init_error: {exc}", raw_output=[])
+            _update_analysis_failed(
+                conn,
+                analysis_id,
+                f"llm_init_error: {exc}",
+                raw_output=_build_raw_output(None),
+                request_payload=None,
+            )
             return {
                 "analysis_id": analysis_id,
                 "status": "failed",
@@ -181,13 +229,22 @@ def analyze_news_event(news_event_id: int) -> dict[str, Any]:
             trace_id=trace_id,
             provider=provider,
             model=model,
+            request_payload=None,
         )
 
         input_text = _build_input_text(event)
         try:
             result = client.analyze_news(input_text)
-            raw_output = [attempt.__dict__ for attempt in client.last_attempts]
-            _update_analysis_success(conn, analysis_id, result, raw_output)
+            raw_output = client.last_raw_output or _build_raw_output(
+                client.last_attempts[-1] if client.last_attempts else None
+            )
+            _update_analysis_success(
+                conn,
+                analysis_id,
+                result,
+                raw_output,
+                request_payload=client.last_request,
+            )
             _replace_analysis_tickers(conn, analysis_id, result.tickers)
             return {
                 "analysis_id": analysis_id,
@@ -198,11 +255,18 @@ def analyze_news_event(news_event_id: int) -> dict[str, Any]:
                 "model": model,
             }
         except LLMAnalysisError as exc:
-            raw_output = [attempt.__dict__ for attempt in exc.attempts]
+            last_attempt = exc.attempts[-1] if exc.attempts else None
+            raw_output = _build_raw_output(last_attempt)
             last_error = exc.attempts[-1].error if exc.attempts else str(exc)
             error_message = f"{exc}: {last_error}" if last_error else str(exc)
             logger.error("llm_analysis_failed news_event_id=%s error=%s", news_event_id, error_message)
-            _update_analysis_failed(conn, analysis_id, error_message, raw_output)
+            _update_analysis_failed(
+                conn,
+                analysis_id,
+                error_message,
+                raw_output,
+                request_payload=client.last_request,
+            )
             return {
                 "analysis_id": analysis_id,
                 "status": "failed",
@@ -212,7 +276,13 @@ def analyze_news_event(news_event_id: int) -> dict[str, Any]:
             }
         except Exception as exc:  # noqa: BLE001
             logger.error("llm_analysis_failed news_event_id=%s error=%s", news_event_id, exc)
-            _update_analysis_failed(conn, analysis_id, f"unexpected_error: {exc}", raw_output=[])
+            _update_analysis_failed(
+                conn,
+                analysis_id,
+                f"unexpected_error: {exc}",
+                raw_output=_build_raw_output(None),
+                request_payload=client.last_request,
+            )
             return {
                 "analysis_id": analysis_id,
                 "status": "failed",
