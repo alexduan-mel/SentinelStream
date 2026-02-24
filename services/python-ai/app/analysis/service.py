@@ -194,6 +194,8 @@ def analyze_news_event(news_event_id: int) -> dict[str, Any]:
                 "status": "succeeded",
                 "result": result,
                 "tickers": result.tickers,
+                "provider": provider,
+                "model": model,
             }
         except LLMAnalysisError as exc:
             raw_output = [attempt.__dict__ for attempt in exc.attempts]
@@ -205,6 +207,8 @@ def analyze_news_event(news_event_id: int) -> dict[str, Any]:
                 "analysis_id": analysis_id,
                 "status": "failed",
                 "error_message": error_message,
+                "provider": provider,
+                "model": model,
             }
         except Exception as exc:  # noqa: BLE001
             logger.error("llm_analysis_failed news_event_id=%s error=%s", news_event_id, exc)
@@ -213,4 +217,6 @@ def analyze_news_event(news_event_id: int) -> dict[str, Any]:
                 "analysis_id": analysis_id,
                 "status": "failed",
                 "error_message": str(exc),
+                "provider": provider,
+                "model": model,
             }

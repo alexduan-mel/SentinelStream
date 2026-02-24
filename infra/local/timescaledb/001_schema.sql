@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS analysis_jobs (
   job_type    TEXT NOT NULL, -- e.g., llm_analysis, fetch_content
   status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','done','failed')),
   attempts    INTEGER NOT NULL DEFAULT 0,
-  next_run_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  run_after  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   locked_at   TIMESTAMPTZ NULL,
   locked_by   TEXT NULL,
   last_error  TEXT NULL,
@@ -146,7 +146,7 @@ COMMENT ON COLUMN analysis_jobs.trace_id IS 'Correlation id for publishing this 
 COMMENT ON COLUMN analysis_jobs.job_type IS 'Job type (e.g., llm_analysis, fetch_content)';
 COMMENT ON COLUMN analysis_jobs.status IS 'Job status: pending | running | done | failed';
 COMMENT ON COLUMN analysis_jobs.attempts IS 'Number of processing attempts';
-COMMENT ON COLUMN analysis_jobs.next_run_at IS 'Earliest time this job should be run';
+COMMENT ON COLUMN analysis_jobs.run_after IS 'Earliest time this job should be run';
 COMMENT ON COLUMN analysis_jobs.locked_at IS 'Time the job was locked for processing';
 COMMENT ON COLUMN analysis_jobs.locked_by IS 'Worker identifier holding the lock';
 COMMENT ON COLUMN analysis_jobs.last_error IS 'Last error message from processing';
@@ -154,7 +154,7 @@ COMMENT ON COLUMN analysis_jobs.created_at IS 'Time the job was created';
 COMMENT ON COLUMN analysis_jobs.updated_at IS 'Time the job was last updated';
 
 CREATE INDEX IF NOT EXISTS idx_analysis_jobs_status_next_run
-  ON analysis_jobs (status, next_run_at);
+  ON analysis_jobs (status, run_after);
 
 CREATE INDEX IF NOT EXISTS idx_analysis_jobs_created_at
   ON analysis_jobs (created_at);

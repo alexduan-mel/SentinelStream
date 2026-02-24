@@ -118,10 +118,11 @@ def _run_with_provider(monkeypatch, provider, max_retries=2):
     monkeypatch.setattr(analysis_service, "load_llm_client", lambda: client)
 
 
-def _run_worker_once():
+def _run_worker_once(max_attempts: int = 1):
     with _db_conn() as conn:
-        jobs = worker._claim_jobs(conn, 10, "test")
-        worker._process_jobs(conn, jobs, logging.getLogger("test"))
+        run_after_column = worker._get_run_after_column(conn)
+        jobs = worker._claim_jobs(conn, 10, "test", max_attempts, run_after_column)
+        worker._process_jobs(conn, jobs, logging.getLogger("test"), max_attempts, run_after_column)
 
 
 def test_happy_path(monkeypatch):
@@ -133,7 +134,7 @@ def test_happy_path(monkeypatch):
         _insert_job(conn, news_event_id)
 
     _run_with_provider(monkeypatch, provider, max_retries=2)
-    _run_worker_once()
+    _run_worker_once(max_attempts=1)
 
     with _db_conn() as conn:
         row = _fetch_analysis(conn, news_event_id)
@@ -156,7 +157,7 @@ def test_invalid_json_retries_and_fails(monkeypatch):
         news_event_id = _insert_news_event(conn)
         _insert_job(conn, news_event_id)
     _run_with_provider(monkeypatch, provider, max_retries=2)
-    _run_worker_once()
+    _run_worker_once(max_attempts=1)
 
     with _db_conn() as conn:
         row = _fetch_analysis(conn, news_event_id)
@@ -176,7 +177,7 @@ def test_schema_validation_retries_and_fails(monkeypatch):
         news_event_id = _insert_news_event(conn)
         _insert_job(conn, news_event_id)
     _run_with_provider(monkeypatch, provider, max_retries=2)
-    _run_worker_once()
+    _run_worker_once(max_attempts=1)
 
     with _db_conn() as conn:
         row = _fetch_analysis(conn, news_event_id)
@@ -194,7 +195,7 @@ def test_timeout_retries_and_fails(monkeypatch):
         news_event_id = _insert_news_event(conn)
         _insert_job(conn, news_event_id)
     _run_with_provider(monkeypatch, provider, max_retries=2)
-    _run_worker_once()
+    _run_worker_once(max_attempts=1)
 
     with _db_conn() as conn:
         row = _fetch_analysis(conn, news_event_id)
@@ -212,7 +213,7 @@ def test_non_retryable_error(monkeypatch):
         news_event_id = _insert_news_event(conn)
         _insert_job(conn, news_event_id)
     _run_with_provider(monkeypatch, provider, max_retries=2)
-    _run_worker_once()
+    _run_worker_once(max_attempts=1)
 
     with _db_conn() as conn:
         row = _fetch_analysis(conn, news_event_id)
