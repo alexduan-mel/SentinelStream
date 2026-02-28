@@ -377,7 +377,10 @@ def main() -> int:
                             latest_per_run,
                             dropped_latest,
                         )
-                    raw_items.extend(latest_items)
+                    for item in latest_items:
+                        enriched = dict(item)
+                        enriched["request_ticker"] = symbol
+                        raw_items.append(enriched)
 
                 fetched_count = len(raw_items)
                 raw_inserted_count, raw_updated_count = insert_raw_items(
@@ -394,7 +397,12 @@ def main() -> int:
         ingested_at = datetime.now(timezone.utc)
         for raw_row in raw_rows:
             try:
-                event = normalize_finnhub(raw_row.raw_payload, trace_id, ingested_at)
+                event = normalize_finnhub(
+                    raw_row.raw_payload,
+                    trace_id,
+                    ingested_at,
+                    request_ticker=raw_row.request_ticker,
+                )
                 event_id, inserted = upsert_news_event(conn, event)
                 news_upsert_count += 1
                 if inserted:

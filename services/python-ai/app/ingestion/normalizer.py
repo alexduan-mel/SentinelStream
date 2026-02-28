@@ -48,6 +48,7 @@ def normalize_finnhub(
     item: dict[str, Any],
     trace_id: UUID,
     ingested_at: datetime,
+    request_ticker: str | None = None,
 ) -> NewsEvent:
     url = item.get("url")
     headline = item.get("headline") or item.get("title")
@@ -66,6 +67,11 @@ def normalize_finnhub(
         content = None
 
     related = _parse_related(item.get("related"))
+    request_symbol = request_ticker or item.get("request_ticker")
+    if isinstance(request_symbol, str):
+        request_symbol = request_symbol.strip().upper() or None
+    else:
+        request_symbol = None
     tickers = _dedupe_preserve(related)
 
     source = item.get("source") or "finnhub"
@@ -75,6 +81,7 @@ def normalize_finnhub(
         news_id=news_id,
         trace_id=trace_id,
         source=source,
+        request_ticker=request_symbol,
         published_at=published_at,
         ingested_at=ingested_at,
         title=headline,

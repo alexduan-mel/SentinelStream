@@ -1,7 +1,9 @@
+import type { Sentiment } from "../utils/sentiment";
+
 export interface Signal {
   id: string;
   ticker: string;
-  sentiment: "Bullish" | "Bearish";
+  sentiment: Sentiment;
   title: string;
   description: string;
   confidence: number;

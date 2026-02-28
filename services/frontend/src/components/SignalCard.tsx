@@ -1,8 +1,10 @@
 import Chip from "./Chip";
+import type { Sentiment } from "../utils/sentiment";
+import { getSentimentMeta } from "../utils/sentiment";
 
 interface SignalCardProps {
   ticker: string;
-  sentiment: "Bullish" | "Bearish";
+  sentiment: Sentiment;
   title: string;
   description: string;
   confidence: number;
@@ -21,11 +23,13 @@ export default function SignalCard({
   tags,
   highConfidence = false
 }: SignalCardProps) {
-  const sentimentClass = sentiment === "Bullish" ? "text-semantic-positive" : "text-semantic-negative";
+  const sentimentMeta = getSentimentMeta(sentiment);
   const arrowPath =
-    sentiment === "Bullish"
+    sentimentMeta.icon === "up"
       ? ["M7 7h10v10", "M7 17 17 7"]
-      : ["M7 17h10V7", "M7 7 17 17"];
+      : sentimentMeta.icon === "down"
+        ? ["M7 17h10V7", "M7 7 17 17"]
+        : [];
 
   return (
     <div
@@ -44,30 +48,31 @@ export default function SignalCard({
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-12">
             <div className="flex items-center gap-8">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className={sentimentClass}
+              {sentimentMeta.icon !== "none" && (
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className={sentimentMeta.colorClass}
+                >
+                  {arrowPath.map((d) => (
+                    <path
+                      key={d}
+                      d={d}
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ))}
+                </svg>
+              )}
+              <span
+                className={["text-sm font-medium", sentimentMeta.colorClass].join(" ")}
               >
-                {arrowPath.map((d) => (
-                  <path
-                    key={d}
-                    d={d}
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                ))}
-              </svg>
-              <span className={[
-                "text-sm font-medium",
-                sentimentClass
-              ].join(" ")}>
-                {sentiment}
+                {sentimentMeta.label}
               </span>
             </div>
             <span className="text-lg font-bold tracking-tight text-white">{ticker}</span>

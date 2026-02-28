@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS news_events (
   news_id         CHAR(64) NOT NULL,
   trace_id        UUID NOT NULL,          -- correlation ID per pipeline run
   source          TEXT NOT NULL,          -- e.g., finnhub / polygon / rss
+  request_ticker  TEXT,                  -- ticker used in the provider request (if any)
   source_event_id TEXT,                  -- provider-specific ID if available
 
   published_at    TIMESTAMPTZ NOT NULL,   -- from provider (point-in-time context)
@@ -56,6 +57,7 @@ COMMENT ON COLUMN news_events.id IS 'Surrogate primary key';
 COMMENT ON COLUMN news_events.news_id IS 'Deterministic unique ID (recommended: sha256(source|url))';
 COMMENT ON COLUMN news_events.trace_id IS 'Correlation ID for a single pipeline run';
 COMMENT ON COLUMN news_events.source IS 'News provider name';
+COMMENT ON COLUMN news_events.request_ticker IS 'Ticker used in the provider request (if any)';
 COMMENT ON COLUMN news_events.source_event_id IS 'Provider-specific event ID if available';
 COMMENT ON COLUMN news_events.published_at IS 'Published time from provider (UTC)';
 COMMENT ON COLUMN news_events.ingested_at IS 'Ingestion time in SentinelStream (UTC)';
@@ -65,6 +67,7 @@ COMMENT ON COLUMN news_events.raw_payload IS 'Raw provider payload stored for de
 -- Indexes for dashboard queries
 CREATE INDEX IF NOT EXISTS idx_news_published_at ON news_events (published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_news_source ON news_events (source);
+CREATE INDEX IF NOT EXISTS idx_news_request_ticker ON news_events (request_ticker);
 CREATE INDEX IF NOT EXISTS idx_news_tickers_gin ON news_events USING GIN (tickers);
 CREATE INDEX IF NOT EXISTS idx_news_news_id ON news_events (news_id);
 
@@ -75,6 +78,7 @@ CREATE TABLE IF NOT EXISTS raw_news_items (
   id           BIGSERIAL PRIMARY KEY,
   raw_uuid     UUID NOT NULL DEFAULT gen_random_uuid(),
   source       TEXT NOT NULL,                 -- provider name (e.g., finnhub)
+  request_ticker TEXT NULL,                   -- ticker used in the provider request (if any)
   trace_id     UUID NOT NULL,                 -- correlation ID for the fetch run
   fetched_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- time the raw payload was fetched
 
@@ -97,6 +101,7 @@ COMMENT ON TABLE raw_news_items IS 'Raw news payloads staged for replayable norm
 COMMENT ON COLUMN raw_news_items.id IS 'Surrogate primary key';
 COMMENT ON COLUMN raw_news_items.raw_uuid IS 'Stable UUID for a raw news payload';
 COMMENT ON COLUMN raw_news_items.source IS 'Provider name (e.g., finnhub)';
+COMMENT ON COLUMN raw_news_items.request_ticker IS 'Ticker used in the provider request (if any)';
 COMMENT ON COLUMN raw_news_items.trace_id IS 'Correlation id for a single fetch run';
 COMMENT ON COLUMN raw_news_items.fetched_at IS 'Time the raw payload was fetched';
 COMMENT ON COLUMN raw_news_items.published_at IS 'Published time from provider if available';
