@@ -6,7 +6,7 @@ interface BackendSignalResponse {
   id: number;
   title: string;
   url: string;
-  source: string;
+  publisher: string | null;
   requestTicker?: string | null;
   publishedAt: string;
   sentiment: string | null;
@@ -19,7 +19,7 @@ interface BackendEvidenceItemResponse {
   id: number;
   title: string;
   url: string;
-  source: string;
+  publisher: string | null;
   publishedAt: string;
   confidence: number | null;
 }
@@ -33,7 +33,7 @@ interface BackendSignalDetailResponse {
   publishedAt: string;
   title: string;
   url: string;
-  source: string;
+  publisher: string | null;
   evidenceItems: BackendEvidenceItemResponse[];
 }
 
@@ -86,14 +86,14 @@ const mockSignalDetail: SignalDetail = {
   evidenceItems: [
     {
       id: "ev-1",
-      source: "Reuters",
+      publisher: "Reuters",
       headline: "NVIDIA receives upgraded price target from major investment banks",
       timestamp: "2026/02/21 20:15:00",
       confidence: 0.92
     },
     {
       id: "ev-2",
-      source: "SEC Filings",
+      publisher: "SEC Filings",
       headline: "Institutional ownership increased by 4.2% in recent filings",
       timestamp: "2026/02/21 19:45:00",
       confidence: 0.88
@@ -144,7 +144,7 @@ const mapSignal = (item: BackendSignalResponse): Signal => {
 const mapEvidenceItem = (item: BackendEvidenceItemResponse): SignalEvidenceItem => {
   return {
     id: String(item.id),
-    source: item.source,
+    publisher: item.publisher || "Unknown",
     headline: item.title,
     timestamp: formatDateTime(item.publishedAt),
     confidence: item.confidence ?? 0

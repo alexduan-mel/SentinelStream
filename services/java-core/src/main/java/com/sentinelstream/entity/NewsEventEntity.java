@@ -20,7 +20,10 @@ public class NewsEventEntity {
     private String url;
 
     @Column(nullable = false)
-    private String source;
+    private String provider;
+
+    @Column
+    private String publisher;
 
     @Column(name = "request_ticker")
     private String requestTicker;
@@ -43,8 +46,12 @@ public class NewsEventEntity {
         return url;
     }
 
-    public String getSource() {
-        return source;
+    public String getProvider() {
+        return provider;
+    }
+
+    public String getPublisher() {
+        return publisher;
     }
 
     public String getRequestTicker() {

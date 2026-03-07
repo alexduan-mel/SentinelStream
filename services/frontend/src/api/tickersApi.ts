@@ -18,7 +18,7 @@ interface BackendSignalItem {
   news: {
     title: string;
     url: string;
-    source: string;
+    publisher: string | null;
   };
   signalConfidence?: number | null;
   analyses?: BackendAnalysis[];
@@ -45,7 +45,7 @@ const mockItem: TickerSignalItem = {
   news: {
     title: "NVIDIA receives upgraded price target from major investment banks",
     url: "https://example.com",
-    source: "Reuters"
+    publisher: "Reuters"
   },
   signalConfidence: 0.87,
   analyses: [
@@ -83,7 +83,7 @@ const mockResponse: TickerSignalsResponse = {
       news: {
         title: "Institutional ownership increased by 4.2% in recent filings",
         url: "https://example.com/filings",
-        source: "SEC Filings"
+        publisher: "SEC Filings"
       }
     }
   ],

@@ -13,7 +13,7 @@ public record SignalDetailResponse(
     OffsetDateTime publishedAt,
     String title,
     String url,
-    String source,
+    String publisher,
     List<EvidenceItemResponse> evidenceItems
 ) {
 }

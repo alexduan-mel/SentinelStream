@@ -42,7 +42,7 @@ def connect_db() -> PgConnection:
 
 def _fetch_news_event(conn, news_event_id: int) -> dict[str, Any] | None:
     sql = (
-        "SELECT id, title, url, content, source, published_at "
+        "SELECT id, title, url, content, provider, publisher, published_at "
         "FROM news_events WHERE id = %s"
     )
     with conn.cursor() as cursor:
@@ -55,8 +55,9 @@ def _fetch_news_event(conn, news_event_id: int) -> dict[str, Any] | None:
         "title": row[1],
         "url": row[2],
         "content": row[3],
-        "source": row[4],
-        "published_at": row[5],
+        "provider": row[4],
+        "publisher": row[5],
+        "published_at": row[6],
     }
 
 

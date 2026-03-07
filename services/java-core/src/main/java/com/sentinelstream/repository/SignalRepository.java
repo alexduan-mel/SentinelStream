@@ -13,7 +13,7 @@ import com.sentinelstream.entity.LlmAnalysisEntity;
 public interface SignalRepository extends JpaRepository<LlmAnalysisEntity, UUID> {
     @Query(
         "select new com.sentinelstream.dto.SignalResponse(" +
-            "ne.id, ne.title, ne.url, ne.source, ne.requestTicker, ne.publishedAt, " +
+            "ne.id, ne.title, ne.url, ne.publisher, ne.requestTicker, ne.publishedAt, " +
             "la.sentiment, la.confidence, la.summary" +
         ") " +
         "from LlmAnalysisEntity la " +

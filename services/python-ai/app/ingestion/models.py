@@ -11,7 +11,8 @@ class NewsEvent(BaseModel):
     id: int | None = None
     news_id: str
     trace_id: UUID
-    source: str = Field(default="finnhub")
+    provider: str = Field(default="finnhub")
+    publisher: str | None = None
     request_ticker: str | None = None
     source_event_id: str | None = None
     scope: str | None = None

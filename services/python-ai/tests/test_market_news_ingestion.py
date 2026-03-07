@@ -49,7 +49,8 @@ def test_normalize_market_news_item():
 
     event = normalize_market_news_item(item, trace_id, ingested_at, "general")
 
-    assert event.source == "finnhub"
+    assert event.provider == "finnhub"
+    assert event.publisher == "Bloomberg"
     assert event.scope == "market"
     assert event.event_type == "market_news"
     assert event.primary_symbol is None
@@ -75,3 +76,19 @@ def test_normalize_market_news_primary_symbol_from_single_related():
     event = normalize_market_news_item(item, trace_id, ingested_at, "general")
 
     assert event.primary_symbol == "AAPL"
+
+
+def test_normalize_market_news_null_publisher():
+    trace_id = uuid4()
+    ingested_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    item = {
+        "headline": "Publisher missing",
+        "summary": "No source field",
+        "datetime": 1704067200,
+        "url": "https://example.com/no-source",
+    }
+
+    event = normalize_market_news_item(item, trace_id, ingested_at, "general")
+
+    assert event.provider == "finnhub"
+    assert event.publisher is None

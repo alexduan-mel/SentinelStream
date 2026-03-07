@@ -48,12 +48,13 @@ def _insert_news_event(conn) -> int:
     now = datetime.now(timezone.utc)
     with conn.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO news_events (news_id, trace_id, source, published_at, ingested_at, title, url, content, tickers, raw_payload) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            "INSERT INTO news_events (news_id, trace_id, provider, publisher, published_at, ingested_at, title, url, content, tickers, raw_payload) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (
                 news_id,
                 str(uuid4()),
                 "finnhub",
+                "Reuters",
                 now,
                 now,
                 "Test title",

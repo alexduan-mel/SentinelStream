@@ -45,7 +45,7 @@ public class SignalServiceImpl implements SignalService {
             base.publishedAt(),
             base.title(),
             base.url(),
-            base.source(),
+            base.publisher(),
             evidence
         );
     }

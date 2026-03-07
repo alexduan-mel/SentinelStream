@@ -26,7 +26,7 @@ public class SignalDetailRepository {
             SELECT ne.request_ticker,
                    ne.title,
                    ne.url,
-                   ne.source,
+                   ne.publisher,
                    ne.published_at,
                    la.analysis_uuid,
                    la.sentiment,
@@ -49,7 +49,7 @@ public class SignalDetailRepository {
             SELECT ne.id,
                    ne.title,
                    ne.url,
-                   ne.source,
+                   ne.publisher,
                    ne.published_at,
                    la.confidence
             FROM news_events ne
@@ -74,7 +74,7 @@ public class SignalDetailRepository {
                 rs.getObject("published_at", OffsetDateTime.class),
                 rs.getString("title"),
                 rs.getString("url"),
-                rs.getString("source"),
+                rs.getString("publisher"),
                 List.of()
             );
         }
@@ -87,7 +87,7 @@ public class SignalDetailRepository {
                 (Long) rs.getObject("id"),
                 rs.getString("title"),
                 rs.getString("url"),
-                rs.getString("source"),
+                rs.getString("publisher"),
                 rs.getObject("published_at", OffsetDateTime.class),
                 (Double) rs.getObject("confidence")
             );

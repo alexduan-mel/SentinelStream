@@ -10,7 +10,7 @@ from ingestion.url_utils import canonicalize_url
 
 MARKET_NEWS_SCOPE = "market"
 MARKET_NEWS_EVENT_TYPE = "market_news"
-DEFAULT_SOURCE = "finnhub"
+DEFAULT_PROVIDER = "finnhub"
 
 
 class MarketNewsParseError(ValueError):
@@ -82,18 +82,18 @@ def _derive_primary_symbol(item: dict[str, Any], related: list[str]) -> str | No
 
 
 def dedup_market_news_key(
-    source: str,
+    provider: str,
     source_event_id: str | None,
     canonical_url: str | None,
     title: str | None,
     published_at: datetime | None,
 ) -> str:
     if source_event_id:
-        return _sha256(f"{source}|{source_event_id}")
+        return _sha256(f"{provider}|{source_event_id}")
     if canonical_url:
-        return _sha256(f"{source}|{canonical_url}")
+        return _sha256(f"{provider}|{canonical_url}")
     published_str = published_at.isoformat() if published_at else ""
-    return _sha256(f"{source}|{title or ''}|{published_str}")
+    return _sha256(f"{provider}|{title or ''}|{published_str}")
 
 
 def normalize_market_news_item(
@@ -101,7 +101,7 @@ def normalize_market_news_item(
     trace_id: UUID,
     ingested_at: datetime,
     category: str,
-    source: str = DEFAULT_SOURCE,
+    provider: str = DEFAULT_PROVIDER,
 ) -> NewsEvent:
     url = item.get("url")
     headline = item.get("headline") or item.get("title")
@@ -133,7 +133,7 @@ def normalize_market_news_item(
     else:
         source_event_id = None
 
-    news_id = dedup_market_news_key(source, source_event_id, canonical_url, str(headline), published_at)
+    news_id = dedup_market_news_key(provider, source_event_id, canonical_url, str(headline), published_at)
 
     raw_payload = {
         "item": item,
@@ -146,10 +146,15 @@ def normalize_market_news_item(
         },
     }
 
+    publisher = item.get("source") if isinstance(item.get("source"), str) else None
+    if isinstance(publisher, str):
+        publisher = publisher.strip() or None
+
     return NewsEvent(
         news_id=news_id,
         trace_id=trace_id,
-        source=source,
+        provider=provider,
+        publisher=publisher,
         request_ticker=None,
         source_event_id=source_event_id,
         scope=MARKET_NEWS_SCOPE,

@@ -7,7 +7,7 @@ import type { AnalysisResult } from "../types";
 
 export interface EvidenceItem {
   id: string;
-  source: string;
+  publisher: string;
   headline: string;
   timestamp: string;
   signalConfidence: number;
@@ -44,7 +44,7 @@ export default function EvidenceList({ items }: EvidenceListProps) {
                   onClick={() => setExpandedId(isExpanded ? null : item.id)}
                 >
                   <div className="flex flex-col gap-4">
-                    <span className="text-label text-semantic-info">{item.source}</span>
+                    <span className="text-label text-semantic-info">{item.publisher}</span>
                     <span className="text-body text-text-primary">{item.headline}</span>
                     <span className="text-caption text-text-muted">{item.timestamp}</span>
                   </div>

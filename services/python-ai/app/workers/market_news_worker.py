@@ -96,7 +96,7 @@ def _get_max_market_news_id(conn, category: str) -> int | None:
     sql = (
         "SELECT MAX(source_event_id::bigint) "
         "FROM news_events "
-        "WHERE source = %s AND event_type = %s "
+        "WHERE provider = %s AND event_type = %s "
         "AND source_event_id ~ '^[0-9]+$' "
         "AND raw_payload #>> '{_meta,category}' = %s"
     )

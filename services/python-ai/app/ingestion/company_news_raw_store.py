@@ -43,16 +43,24 @@ def _parse_timestamp(value: Any) -> datetime | None:
     return None
 
 
-def _dedup_key(source: str, url: str | None, title: str | None, published_at: datetime | None) -> str:
+def _dedup_key(
+    provider: str,
+    source_event_id: str | None,
+    url: str | None,
+    title: str | None,
+    published_at: datetime | None,
+) -> str:
+    if source_event_id:
+        return _sha256(f"{provider}|{source_event_id}")
     if url:
-        return _sha256(f"{source}|{url}")
+        return _sha256(f"{provider}|{url}")
     published_str = published_at.isoformat() if published_at else ""
-    return _sha256(f"{source}|{title or ''}|{published_str}")
+    return _sha256(f"{provider}|{title or ''}|{published_str}")
 
 
 def insert_raw_items(
     conn,
-    source: str,
+    provider: str,
     trace_id: UUID,
     fetched_at: datetime,
     items: Iterable[dict[str, Any]],
@@ -69,10 +77,15 @@ def insert_raw_items(
                 canonical_url = None
         title = item.get("headline") or item.get("title")
         published_at = _parse_timestamp(item.get("datetime") or item.get("published_at"))
-        dedup_key = _dedup_key(source, canonical_url or url, title, published_at)
-        rows_by_key[(source, dedup_key)] = (
+        source_event_id = item.get("id")
+        if source_event_id is not None:
+            source_event_id = str(source_event_id)
+        else:
+            source_event_id = None
+        dedup_key = _dedup_key(provider, source_event_id, canonical_url or url, title, published_at)
+        rows_by_key[(provider, dedup_key)] = (
             (
-                source,
+                provider,
                 request_ticker,
                 str(trace_id),
                 fetched_at,
@@ -108,7 +121,7 @@ def insert_raw_items(
     return inserted, updated
 
 
-def select_raw_items(conn, source: str, limit: int) -> list[RawNewsRow]:
+def select_raw_items(conn, provider: str, limit: int) -> list[RawNewsRow]:
     sql = (
         "SELECT id, raw_payload, request_ticker "
         "FROM raw_news_items "
@@ -119,7 +132,7 @@ def select_raw_items(conn, source: str, limit: int) -> list[RawNewsRow]:
         "LIMIT %s"
     )
     with conn.cursor() as cursor:
-        cursor.execute(sql, (source, limit))
+        cursor.execute(sql, (provider, limit))
         rows = cursor.fetchall()
     return [RawNewsRow(id=row[0], raw_payload=row[1], request_ticker=row[2]) for row in rows]
 

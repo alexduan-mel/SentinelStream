@@ -12,6 +12,6 @@ public record SignalSummaryResponse(
     OffsetDateTime publishedAt,
     String title,
     String url,
-    String source
+    String publisher
 ) {
 }

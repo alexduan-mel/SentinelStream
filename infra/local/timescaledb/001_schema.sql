@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS news_events (
   id              BIGSERIAL PRIMARY KEY,
   news_id         CHAR(64) NOT NULL,
   trace_id        UUID NOT NULL,          -- correlation ID per pipeline run
-  source          TEXT NOT NULL,          -- e.g., finnhub / polygon / rss
+  provider        TEXT NOT NULL,          -- e.g., finnhub / polygon / rss
+  publisher       TEXT,                  -- original news outlet (e.g., Reuters)
   request_ticker  TEXT,                  -- ticker used in the provider request (if any)
   source_event_id TEXT,                  -- provider-specific ID if available
   scope           TEXT,                  -- market | company | sector (optional)
@@ -52,14 +53,15 @@ CREATE TABLE IF NOT EXISTS news_events (
   raw_payload     JSONB,                  -- raw provider payload for debugging/replay
 
   CONSTRAINT uq_news_events_news_id UNIQUE (news_id),
-  CONSTRAINT uq_news_source_url UNIQUE (source, url)
+  CONSTRAINT uq_news_provider_url UNIQUE (provider, url)
 );
 
 COMMENT ON TABLE news_events IS 'Normalized news events ingested from external sources';
 COMMENT ON COLUMN news_events.id IS 'Surrogate primary key';
-COMMENT ON COLUMN news_events.news_id IS 'Deterministic unique ID (recommended: sha256(source|url))';
+COMMENT ON COLUMN news_events.news_id IS 'Deterministic unique ID (recommended: sha256(provider|url))';
 COMMENT ON COLUMN news_events.trace_id IS 'Correlation ID for a single pipeline run';
-COMMENT ON COLUMN news_events.source IS 'News provider name';
+COMMENT ON COLUMN news_events.provider IS 'News provider name';
+COMMENT ON COLUMN news_events.publisher IS 'Original news outlet name';
 COMMENT ON COLUMN news_events.request_ticker IS 'Ticker used in the provider request (if any)';
 COMMENT ON COLUMN news_events.source_event_id IS 'Provider-specific event ID if available';
 COMMENT ON COLUMN news_events.scope IS 'News scope: market | company | sector (optional)';
@@ -72,7 +74,7 @@ COMMENT ON COLUMN news_events.raw_payload IS 'Raw provider payload stored for de
 
 -- Indexes for dashboard queries
 CREATE INDEX IF NOT EXISTS idx_news_published_at ON news_events (published_at DESC);
-CREATE INDEX IF NOT EXISTS idx_news_source ON news_events (source);
+CREATE INDEX IF NOT EXISTS idx_news_provider ON news_events (provider);
 CREATE INDEX IF NOT EXISTS idx_news_request_ticker ON news_events (request_ticker);
 CREATE INDEX IF NOT EXISTS idx_news_tickers_gin ON news_events USING GIN (tickers);
 CREATE INDEX IF NOT EXISTS idx_news_news_id ON news_events (news_id);

@@ -6,7 +6,7 @@ public record EvidenceItemResponse(
     Long id,
     String title,
     String url,
-    String source,
+    String publisher,
     OffsetDateTime publishedAt,
     Double confidence
 ) {

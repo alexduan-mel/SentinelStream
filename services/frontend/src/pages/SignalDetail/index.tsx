@@ -87,7 +87,7 @@ export default function SignalDetailPage() {
     () =>
       (data?.items ?? []).map((item) => ({
         id: item.analysisId,
-        source: item.news.source,
+        publisher: item.news.publisher ?? "Unknown",
         headline: item.news.title,
         timestamp: formatDateTime(item.publishedAt),
         signalConfidence: item.signalConfidence,

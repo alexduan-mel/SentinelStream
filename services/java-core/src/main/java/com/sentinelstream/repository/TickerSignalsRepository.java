@@ -46,7 +46,7 @@ public class TickerSignalsRepository {
                    ne.published_at,
                    ne.title,
                    ne.url,
-                   ne.source,
+                   ne.publisher,
                    la.entities
             """
             + selectRaw
@@ -107,7 +107,7 @@ public class TickerSignalsRepository {
             NewsSummaryResponse news = new NewsSummaryResponse(
                 rs.getString("title"),
                 rs.getString("url"),
-                rs.getString("source")
+                rs.getString("publisher")
             );
             List<String> entities = readEntities(rs.getString("entities"));
             JsonNode rawOutput = null;

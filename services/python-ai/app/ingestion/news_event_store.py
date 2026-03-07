@@ -7,9 +7,9 @@ from ingestion.models import NewsEvent
 
 def upsert_news_event(conn, event: NewsEvent) -> tuple[int, bool]:
     sql = (
-        "INSERT INTO news_events (news_id, trace_id, source, request_ticker, source_event_id, scope, event_type, "
-        "primary_symbol, published_at, ingested_at, title, url, content, tickers, raw_payload) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+        "INSERT INTO news_events (news_id, trace_id, provider, publisher, request_ticker, source_event_id, scope, "
+        "event_type, primary_symbol, published_at, ingested_at, title, url, content, tickers, raw_payload) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
         "ON CONFLICT (news_id) DO UPDATE SET news_id = EXCLUDED.news_id "
         "RETURNING id, (xmax = 0) AS inserted"
     )
@@ -19,7 +19,8 @@ def upsert_news_event(conn, event: NewsEvent) -> tuple[int, bool]:
             (
                 event.news_id,
                 str(event.trace_id),
-                event.source,
+                event.provider,
+                event.publisher,
                 event.request_ticker,
                 event.source_event_id,
                 event.scope,
