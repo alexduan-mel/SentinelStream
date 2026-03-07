@@ -6,13 +6,14 @@ from typing import Any
 from uuid import uuid4
 
 import psycopg2
+from psycopg2.extensions import connection as PgConnection
 from psycopg2.extras import Json, execute_values
 
 from llm.factory import load_llm_client
 from llm.interface import LLMAnalysisError, LLMClient, LLMRunAttempt
 
 
-def connect_db():
+def connect_db() -> PgConnection:
     host = os.getenv("POSTGRES_HOST")
     port = int(os.getenv("POSTGRES_PORT", "5432"))
     name = os.getenv("POSTGRES_DB")

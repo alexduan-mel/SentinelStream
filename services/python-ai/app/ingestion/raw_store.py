@@ -15,6 +15,7 @@ from ingestion.url_utils import canonicalize_url
 class RawNewsRow:
     id: int
     raw_payload: dict[str, Any]
+    request_ticker: str | None = None
 
 
 def _sha256(text: str) -> str:
@@ -58,6 +59,7 @@ def insert_raw_items(
 ) -> tuple[int, int]:
     rows_by_key: dict[tuple[str, str], tuple] = {}
     for item in items:
+        request_ticker = item.get("request_ticker")
         url = item.get("url")
         canonical_url = None
         if url:
@@ -71,6 +73,7 @@ def insert_raw_items(
         rows_by_key[(source, dedup_key)] = (
             (
                 source,
+                request_ticker,
                 str(trace_id),
                 fetched_at,
                 published_at,
@@ -87,11 +90,12 @@ def insert_raw_items(
 
     sql = (
         "INSERT INTO raw_news_items "
-        "(source, trace_id, fetched_at, published_at, url, title, dedup_key, raw_payload) "
+        "(source, request_ticker, trace_id, fetched_at, published_at, url, title, dedup_key, raw_payload) "
         "VALUES %s "
         "ON CONFLICT (source, dedup_key) DO UPDATE "
         "SET fetched_at = EXCLUDED.fetched_at, "
         "trace_id = EXCLUDED.trace_id, "
+        "request_ticker = EXCLUDED.request_ticker, "
         "raw_payload = EXCLUDED.raw_payload "
         "RETURNING (xmax = 0) AS inserted"
     )
@@ -106,7 +110,7 @@ def insert_raw_items(
 
 def select_raw_items(conn, source: str, limit: int) -> list[RawNewsRow]:
     sql = (
-        "SELECT id, raw_payload "
+        "SELECT id, raw_payload, request_ticker "
         "FROM raw_news_items "
         "WHERE source = %s "
         "AND status IN ('fetched','failed') "
@@ -117,7 +121,7 @@ def select_raw_items(conn, source: str, limit: int) -> list[RawNewsRow]:
     with conn.cursor() as cursor:
         cursor.execute(sql, (source, limit))
         rows = cursor.fetchall()
-    return [RawNewsRow(id=row[0], raw_payload=row[1]) for row in rows]
+    return [RawNewsRow(id=row[0], raw_payload=row[1], request_ticker=row[2]) for row in rows]
 
 
 def mark_raw_normalized(conn, raw_id: int) -> None:

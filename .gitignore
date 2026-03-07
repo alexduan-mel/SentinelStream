@@ -1,3 +1,20 @@
 # Java build output
 **/target/
+
+/services/frontend/node_modules/
+/services/frontend/design/ui
+
+# Env
 .env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# OS
+.DS_Store
