@@ -92,6 +92,7 @@ services:
       - redis
     command: ["python", "-m", "jobs.worker"]
 
+
 volumes:
   timescaledb_data:
   redis_data:

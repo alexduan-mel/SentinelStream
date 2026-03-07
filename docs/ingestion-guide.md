@@ -17,11 +17,11 @@ docker compose build python-ai
 
 # One-shot: fetch -> stage raw -> normalize -> insert (uses tickers from DB)
 docker compose run --rm python-ai \
-  python -m ingestion.run --minutes-back 60 --process-limit 200
+  python -m workers.company_news_worker --minutes-back 60 --process-limit 200
 
 # Replay-only: skip fetch and reprocess raw_news_items
 docker compose run --rm python-ai \
-  python -m ingestion.run --replay-only --process-limit 200
+  python -m workers.company_news_worker --replay-only --process-limit 200
 ```
 
 ### Run locally (outside Docker)
@@ -30,7 +30,7 @@ docker compose run --rm python-ai \
 pip install -r services/python-ai/requirements.txt
 PYTHONPATH=services/python-ai/app \
   POSTGRES_HOST=localhost POSTGRES_PORT=5433 \
-  python -m ingestion.run --tickers AAPL MSFT --minutes-back 60 --process-limit 200
+  python -m workers.company_news_worker --tickers AAPL MSFT --minutes-back 60 --process-limit 200
 ```
 
 Notes:

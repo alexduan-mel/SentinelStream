@@ -12,10 +12,10 @@ import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import Json
 
+from ingestion.company_news_normalizer import NormalizationError, normalize_finnhub
+from ingestion.company_news_raw_store import insert_raw_items, mark_raw_failed, mark_raw_normalized, select_raw_items
 from ingestion.finnhub_client import FinnhubError, fetch_company_news
-from ingestion.news_store import upsert_news_event
-from ingestion.normalizer import NormalizationError, normalize_finnhub
-from ingestion.raw_store import insert_raw_items, mark_raw_failed, mark_raw_normalized, select_raw_items
+from ingestion.news_event_store import upsert_news_event
 from jobs.publisher import publish_job
 
 JOB_NAME = "finnhub_ingestion"

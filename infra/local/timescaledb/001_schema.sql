@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS news_events (
   source          TEXT NOT NULL,          -- e.g., finnhub / polygon / rss
   request_ticker  TEXT,                  -- ticker used in the provider request (if any)
   source_event_id TEXT,                  -- provider-specific ID if available
+  scope           TEXT,                  -- market | company | sector (optional)
+  event_type      TEXT,                  -- market_news | company_news (optional)
+  primary_symbol  TEXT,                  -- primary ticker if confidently derivable
 
   published_at    TIMESTAMPTZ NOT NULL,   -- from provider (point-in-time context)
   ingested_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),  -- system ingestion time
@@ -59,6 +62,9 @@ COMMENT ON COLUMN news_events.trace_id IS 'Correlation ID for a single pipeline 
 COMMENT ON COLUMN news_events.source IS 'News provider name';
 COMMENT ON COLUMN news_events.request_ticker IS 'Ticker used in the provider request (if any)';
 COMMENT ON COLUMN news_events.source_event_id IS 'Provider-specific event ID if available';
+COMMENT ON COLUMN news_events.scope IS 'News scope: market | company | sector (optional)';
+COMMENT ON COLUMN news_events.event_type IS 'News event type (optional)';
+COMMENT ON COLUMN news_events.primary_symbol IS 'Primary ticker if confidently derivable';
 COMMENT ON COLUMN news_events.published_at IS 'Published time from provider (UTC)';
 COMMENT ON COLUMN news_events.ingested_at IS 'Ingestion time in SentinelStream (UTC)';
 COMMENT ON COLUMN news_events.tickers IS 'Tickers associated with this news event (MVP as TEXT[])';

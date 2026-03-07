@@ -145,3 +145,26 @@ docker compose exec timescaledb psql -U postgres -d sentinel
 \du 
 # list tables
 \dt
+
+### Market News Worker
+
+Environment variables:
+- `FINNHUB_API_KEY` (required)
+- `MARKET_NEWS_CATEGORY` (default: `general,merger`, comma-separated)
+- `MARKET_NEWS_POLL_SECONDS` (default: `300`)
+- `LOG_LEVEL` (default: `INFO`)
+
+Run locally:
+
+```bash
+python -m workers.market_news_worker
+```
+
+Expected behavior:
+- Polls Finnhub market news on the configured interval.
+- Normalizes records into `news_events` with `scope=market`, `event_type=market_news`, and `source=finnhub`.
+- Logs fetch/insert/dedup/skip/error counts per poll cycle.
+
+Docker Compose:
+- The `scheduler` service runs both company news and market news workers via cron.
+- Defaults are every 10 minutes; override with `INGEST_CRON_SCHEDULE` and `MARKET_NEWS_CRON_SCHEDULE`.

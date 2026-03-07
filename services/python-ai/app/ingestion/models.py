@@ -13,6 +13,10 @@ class NewsEvent(BaseModel):
     trace_id: UUID
     source: str = Field(default="finnhub")
     request_ticker: str | None = None
+    source_event_id: str | None = None
+    scope: str | None = None
+    event_type: str | None = None
+    primary_symbol: str | None = None
     published_at: datetime
     ingested_at: datetime
     title: str

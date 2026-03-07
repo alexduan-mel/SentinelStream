@@ -10,7 +10,7 @@ In M1, "publishing" means writing a row into the `analysis_jobs` table in Postgr
 
 ```bash
 PYTHONPATH=services/python-ai/app \
-  python -m ingestion.run --minutes-back 60 --process-limit 200
+  python -m workers.company_news_worker --minutes-back 60 --process-limit 200
 ```
 
 2) Run a worker (processes jobs):

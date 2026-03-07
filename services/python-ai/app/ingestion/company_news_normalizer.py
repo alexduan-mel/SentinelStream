@@ -12,6 +12,10 @@ class NormalizationError(ValueError):
     pass
 
 
+COMPANY_NEWS_SCOPE = "company"
+COMPANY_NEWS_EVENT_TYPE = "company_news"
+
+
 def _parse_related(related: str | None) -> list[str]:
     if not related:
         return []
@@ -21,6 +25,21 @@ def _parse_related(related: str | None) -> list[str]:
 
 def _dedupe_preserve(items: list[str]) -> list[str]:
     return list(dict.fromkeys(items))
+
+
+def _derive_primary_symbol(request_symbol: str | None, item: dict[str, Any], related: list[str]) -> str | None:
+    if request_symbol:
+        return request_symbol
+    symbol = item.get("symbol")
+    if isinstance(symbol, str):
+        symbol = symbol.strip().upper() or None
+    else:
+        symbol = None
+    if symbol:
+        return symbol
+    if len(related) == 1:
+        return related[0]
+    return None
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
@@ -75,13 +94,23 @@ def normalize_finnhub(
     tickers = _dedupe_preserve(related)
 
     source = item.get("source") or "finnhub"
+    source_event_id = item.get("id")
+    if source_event_id is not None:
+        source_event_id = str(source_event_id)
+    else:
+        source_event_id = None
     news_id = generate_news_id(source, canonical_url)
+    primary_symbol = _derive_primary_symbol(request_symbol, item, tickers)
 
     return NewsEvent(
         news_id=news_id,
         trace_id=trace_id,
         source=source,
         request_ticker=request_symbol,
+        source_event_id=source_event_id,
+        scope=COMPANY_NEWS_SCOPE,
+        event_type=COMPANY_NEWS_EVENT_TYPE,
+        primary_symbol=primary_symbol,
         published_at=published_at,
         ingested_at=ingested_at,
         title=headline,
