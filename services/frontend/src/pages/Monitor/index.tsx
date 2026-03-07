@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { Link } from "react-router-dom";
 
 import Card from "../../components/Card";
 import Chip from "../../components/Chip";
@@ -71,7 +72,9 @@ export default function MonitorPage() {
           </div>
           <div className="flex flex-col gap-12">
             {signals.map((signal) => (
-              <SignalCard key={signal.id} {...signal} />
+              <Link key={signal.id} to={`/ticker/${signal.ticker}`} className="block">
+                <SignalCard {...signal} />
+              </Link>
             ))}
           </div>
         </section>

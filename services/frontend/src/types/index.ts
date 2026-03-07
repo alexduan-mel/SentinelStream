@@ -12,6 +12,58 @@ export interface Signal {
   highConfidence?: boolean;
 }
 
+export interface SignalEvidenceItem {
+  id: string;
+  source: string;
+  headline: string;
+  timestamp: string;
+  confidence: number;
+}
+
+export interface SignalDetail {
+  id: string;
+  analysisId: string;
+  ticker: string;
+  sentiment: Sentiment;
+  confidence: number;
+  publishedAt: string;
+  summary: string;
+  evidenceItems: SignalEvidenceItem[];
+}
+
+export interface NewsSummary {
+  title: string;
+  url: string;
+  source: string;
+}
+
+export interface AnalysisResult {
+  provider: string;
+  model: string;
+  sentiment: Sentiment;
+  confidence: number;
+  summary: string;
+  createdAt: string;
+}
+
+export interface TickerSignalItem {
+  analysisId: string;
+  ticker: string;
+  publishedAt: string;
+  news: NewsSummary;
+  signalConfidence: number;
+  analyses: AnalysisResult[];
+}
+
+export interface TickerSignalsResponse {
+  ticker: string;
+  latest: TickerSignalItem | null;
+  items: TickerSignalItem[];
+  limit: number;
+  offset: number;
+  total: number;
+}
+
 export interface Topic {
   id: string;
   name: string;
