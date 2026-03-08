@@ -18,8 +18,8 @@ from ingestion.finnhub_client import FinnhubError, fetch_company_news
 from ingestion.news_event_store import upsert_news_event
 from jobs.publisher import publish_job
 
-JOB_NAME = "finnhub_ingestion"
-LOCK_KEY = "finnhub_ingestion"
+JOB_NAME = "finnhub_company_news"
+LOCK_KEY = "finnhub_company_news"
 
 
 def _parse_args() -> argparse.Namespace:

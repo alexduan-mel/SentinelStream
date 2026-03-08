@@ -12,6 +12,7 @@ from typing import Iterable
 import psycopg2
 
 from analysis.service import analyze_market_news_event
+from llm.rate_limiter import RedisTokenBucket
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,16 @@ def _configure_logging() -> None:
         level=log_level,
         format="%(asctime)s %(levelname)s %(message)s",
     )
+
+
+def _get_env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise SystemExit(f"{name} must be an integer") from exc
 
 
 def _connect_db():
@@ -175,6 +186,7 @@ def _process_jobs(
     logger: logging.Logger,
     max_attempts: int,
     run_after_column: str,
+    limiter: RedisTokenBucket | None,
 ) -> None:
     for job in jobs:
         start_time = time.monotonic()
@@ -192,6 +204,20 @@ def _process_jobs(
                     int((time.monotonic() - start_time) * 1000),
                 )
                 continue
+
+            if limiter is not None:
+                remaining = limiter.consume(1)
+                if remaining < 0:
+                    error_message = "rate_limited"
+                    _mark_failed(conn, job, error_message, True, max_attempts, run_after_column)
+                    logger.warning(
+                        "job_rate_limited job_id=%s news_event_id=%s attempts=%s remaining=%s",
+                        job.id,
+                        job.news_event_id,
+                        job.attempts + 1,
+                        remaining,
+                    )
+                    continue
 
             result = analyze_market_news_event(job.news_event_id, job.id)
             duration_ms = int((time.monotonic() - start_time) * 1000)
@@ -272,6 +298,12 @@ def main() -> int:
     visibility_timeout = int(os.getenv("WORKER_VISIBILITY_TIMEOUT_SECONDS", "300"))
     max_attempts = int(os.getenv("WORKER_MAX_ATTEMPTS", "3"))
     job_types = ("llm_analysis_market",)
+    limiter: RedisTokenBucket | None = None
+    limit = _get_env_int("LLM_MARKET_MAX_REQUESTS", 5)
+    if limit >= 0:
+        limiter = RedisTokenBucket.create("llm_rate_limit:market")
+        limiter.reset(limit)
+        logger.info("llm_rate_limit_init scope=market limit=%s", limit)
 
     with _connect_db() as conn:
         run_after_column = _get_run_after_column(conn)
@@ -281,14 +313,24 @@ def main() -> int:
             if recovered:
                 logger.info("worker_recovered_jobs count=%s", recovered)
 
-            jobs = _claim_jobs(conn, args.batch_size, worker_id, max_attempts, run_after_column, job_types)
+            batch_size = args.batch_size
+            if limiter is not None:
+                remaining = limiter.remaining()
+                if remaining <= 0:
+                    if args.once:
+                        break
+                    time.sleep(max(poll_seconds, 1))
+                    continue
+                batch_size = min(batch_size, remaining)
+
+            jobs = _claim_jobs(conn, batch_size, worker_id, max_attempts, run_after_column, job_types)
             if not jobs:
                 if args.once:
                     break
                 time.sleep(max(poll_seconds, 1))
                 continue
 
-            _process_jobs(conn, jobs, logger, max_attempts, run_after_column)
+            _process_jobs(conn, jobs, logger, max_attempts, run_after_column, limiter)
 
             if args.once:
                 break

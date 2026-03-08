@@ -76,6 +76,8 @@ COMMENT ON COLUMN news_events.raw_payload IS 'Raw provider payload stored for de
 CREATE INDEX IF NOT EXISTS idx_news_published_at ON news_events (published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_news_provider ON news_events (provider);
 CREATE INDEX IF NOT EXISTS idx_news_request_ticker ON news_events (request_ticker);
+CREATE INDEX IF NOT EXISTS idx_news_request_ticker_published_at
+  ON news_events (request_ticker, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_news_tickers_gin ON news_events USING GIN (tickers);
 CREATE INDEX IF NOT EXISTS idx_news_news_id ON news_events (news_id);
 
@@ -229,6 +231,8 @@ COMMENT ON COLUMN llm_analyses.raw_output IS 'Normalized raw output object for d
 
 CREATE INDEX IF NOT EXISTS idx_analysis_news_event_created_at
   ON llm_analyses (news_event_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analysis_news_event_id
+  ON llm_analyses (news_event_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_job_id ON llm_analyses (analysis_job_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_created_at ON llm_analyses (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_analysis_sentiment_created_at

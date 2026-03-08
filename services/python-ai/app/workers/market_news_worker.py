@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import httpx
 import psycopg2
+from psycopg2.extras import Json
 from dotenv import load_dotenv
 
 from ingestion.finnhub_client import FinnhubError, fetch_market_news
@@ -20,6 +21,8 @@ from ingestion.market_news_ingestion import (
 )
 from ingestion.news_event_store import upsert_news_event
 from jobs.publisher import publish_job
+
+JOB_NAME = "finnhub_market_news"
 
 
 def _configure_logging() -> None:
@@ -93,6 +96,60 @@ def _connect_db():
     return conn
 
 
+def _insert_ingestion_run(
+    conn,
+    job_name: str,
+    trace_id: str,
+    categories: list[str],
+    window_from: datetime | None,
+    window_to: datetime | None,
+) -> int:
+    sql = (
+        "INSERT INTO ingestion_runs "
+        "(job_name, trace_id, status, tickers, window_from, window_to) "
+        "VALUES (%s, %s, 'running', %s, %s, %s) "
+        "RETURNING id"
+    )
+    with conn.cursor() as cursor:
+        cursor.execute(sql, (job_name, trace_id, Json(categories), window_from, window_to))
+        run_id = cursor.fetchone()[0]
+    conn.commit()
+    return run_id
+
+
+def _finish_ingestion_run(
+    conn,
+    run_id: int,
+    status: str,
+    fetched_count: int,
+    inserted_count: int,
+    deduped_count: int,
+    error_message: str | None,
+    meta: dict,
+) -> None:
+    sql = (
+        "UPDATE ingestion_runs "
+        "SET finished_at = %s, status = %s, fetched_count = %s, "
+        "inserted_count = %s, deduped_count = %s, error_message = %s, meta = %s "
+        "WHERE id = %s"
+    )
+    with conn.cursor() as cursor:
+        cursor.execute(
+            sql,
+            (
+                datetime.now(timezone.utc),
+                status,
+                fetched_count,
+                inserted_count,
+                deduped_count,
+                error_message,
+                Json(meta),
+                run_id,
+            ),
+        )
+    conn.commit()
+
+
 def _get_max_market_news_id(conn, category: str) -> int | None:
     sql = (
         "SELECT MAX(source_event_id::bigint) "
@@ -147,12 +204,25 @@ def main() -> int:
             jobs_skipped_count = 0
             now = datetime.now(timezone.utc)
 
+            run_id: int | None = None
+            run_finished = False
             try:
                 if conn is None or conn.closed != 0:
                     conn = _connect_db()
 
+                run_id = _insert_ingestion_run(
+                    conn,
+                    JOB_NAME,
+                    str(trace_id),
+                    categories,
+                    None,
+                    None,
+                )
+
+                max_ids: dict[str, int | None] = {}
                 for category in categories:
                     max_source_event_id = _get_max_market_news_id(conn, category)
+                    max_ids[category] = max_source_event_id
                     payload, _status = fetch_market_news(
                         client,
                         api_key,
@@ -194,22 +264,108 @@ def main() -> int:
                             if conn is not None:
                                 conn.rollback()
                             logger.exception("market_news_item_failed trace_id=%s", trace_id)
-
+                meta = {
+                    "categories": categories,
+                    "max_source_event_ids": max_ids,
+                    "poll_seconds": poll_seconds,
+                    "jobs_enqueued_count": jobs_enqueued_count,
+                    "jobs_skipped_count": jobs_skipped_count,
+                }
+                if run_id is not None:
+                    _finish_ingestion_run(
+                        conn,
+                        run_id,
+                        "succeeded",
+                        fetched_count,
+                        inserted_count,
+                        deduped_count,
+                        None,
+                        meta,
+                    )
+                    run_finished = True
             except MarketNewsParseError:
                 error_count += 1
                 logger.exception("market_news_parse_failed trace_id=%s", trace_id)
+                if run_id is not None and conn is not None and conn.closed == 0 and not run_finished:
+                    _finish_ingestion_run(
+                        conn,
+                        run_id,
+                        "failed",
+                        fetched_count,
+                        inserted_count,
+                        deduped_count,
+                        "market_news_parse_failed",
+                        {
+                            "categories": categories,
+                            "poll_seconds": poll_seconds,
+                            "jobs_enqueued_count": jobs_enqueued_count,
+                            "jobs_skipped_count": jobs_skipped_count,
+                        },
+                    )
+                    run_finished = True
             except FinnhubError:
                 error_count += 1
                 logger.exception("market_news_fetch_failed trace_id=%s", trace_id)
+                if run_id is not None and conn is not None and conn.closed == 0 and not run_finished:
+                    _finish_ingestion_run(
+                        conn,
+                        run_id,
+                        "failed",
+                        fetched_count,
+                        inserted_count,
+                        deduped_count,
+                        "market_news_fetch_failed",
+                        {
+                            "categories": categories,
+                            "poll_seconds": poll_seconds,
+                            "jobs_enqueued_count": jobs_enqueued_count,
+                            "jobs_skipped_count": jobs_skipped_count,
+                        },
+                    )
+                    run_finished = True
             except psycopg2.Error:
                 error_count += 1
                 logger.exception("market_news_db_failed trace_id=%s", trace_id)
+                if run_id is not None and conn is not None and conn.closed == 0 and not run_finished:
+                    _finish_ingestion_run(
+                        conn,
+                        run_id,
+                        "failed",
+                        fetched_count,
+                        inserted_count,
+                        deduped_count,
+                        "market_news_db_failed",
+                        {
+                            "categories": categories,
+                            "poll_seconds": poll_seconds,
+                            "jobs_enqueued_count": jobs_enqueued_count,
+                            "jobs_skipped_count": jobs_skipped_count,
+                        },
+                    )
+                    run_finished = True
                 if conn is not None:
                     conn.close()
                     conn = None
             except Exception:
                 error_count += 1
                 logger.exception("market_news_loop_failed trace_id=%s", trace_id)
+                if run_id is not None and conn is not None and conn.closed == 0 and not run_finished:
+                    _finish_ingestion_run(
+                        conn,
+                        run_id,
+                        "failed",
+                        fetched_count,
+                        inserted_count,
+                        deduped_count,
+                        "market_news_loop_failed",
+                        {
+                            "categories": categories,
+                            "poll_seconds": poll_seconds,
+                            "jobs_enqueued_count": jobs_enqueued_count,
+                            "jobs_skipped_count": jobs_skipped_count,
+                        },
+                    )
+                    run_finished = True
 
             logger.info(
                 "market_news_poll_complete trace_id=%s categories=%s fetch_count=%s inserted_count=%s "
