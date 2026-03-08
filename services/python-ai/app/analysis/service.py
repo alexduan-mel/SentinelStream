@@ -237,15 +237,15 @@ def _init_client_and_analysis_row(
     except Exception as exc:  # noqa: BLE001
         provider = "gemini"
         model = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
-            analysis_id = _upsert_analysis_pending(
-                conn,
-                news_event_id=news_event_id,
-                analysis_job_id=analysis_job_id,
-                trace_id=trace_id,
-                provider=provider,
-                model=model,
-                request_payload=None,
-            )
+        analysis_id = _upsert_analysis_pending(
+            conn,
+            news_event_id=news_event_id,
+            analysis_job_id=analysis_job_id,
+            trace_id=trace_id,
+            provider=provider,
+            model=model,
+            request_payload=None,
+        )
         _update_analysis_failed(
             conn,
             analysis_id,
