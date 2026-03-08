@@ -79,7 +79,7 @@ services:
     depends_on:
       - timescaledb
 
-  analysis-worker:
+  analysis-worker-company:
     build:
       context: services/python-ai
     env_file:
@@ -91,6 +91,19 @@ services:
       - timescaledb
       - redis
     command: ["python", "-m", "jobs.worker"]
+
+  analysis-worker-market:
+    build:
+      context: services/python-ai
+    env_file:
+      - .env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    depends_on:
+      - timescaledb
+      - redis
+    command: ["python", "-m", "jobs.market_worker"]
 
 
 volumes:

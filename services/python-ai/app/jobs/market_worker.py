@@ -11,7 +11,8 @@ from typing import Iterable
 
 import psycopg2
 
-from analysis.service import analyze_company_news_event
+from analysis.service import analyze_market_news_event
+
 
 @dataclass(frozen=True)
 class JobRow:
@@ -24,7 +25,7 @@ class JobRow:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Company analysis job worker")
+    parser = argparse.ArgumentParser(description="Market analysis job worker")
     parser.add_argument("--poll-interval", type=int, default=10, help="Seconds between polls")
     parser.add_argument("--batch-size", type=int, default=1, help="Jobs to claim per loop")
     parser.add_argument("--once", action="store_true", help="Process once and exit")
@@ -178,7 +179,7 @@ def _process_jobs(
     for job in jobs:
         start_time = time.monotonic()
         try:
-            if job.job_type not in ("llm_analysis_company", "llm_analysis"):
+            if job.job_type != "llm_analysis_market":
                 error_message = f"unsupported_job_type:{job.job_type}"
                 _mark_failed(conn, job, error_message, False, max_attempts, run_after_column)
                 logger.error(
@@ -192,7 +193,7 @@ def _process_jobs(
                 )
                 continue
 
-            result = analyze_company_news_event(job.news_event_id, job.id)
+            result = analyze_market_news_event(job.news_event_id, job.id)
             duration_ms = int((time.monotonic() - start_time) * 1000)
             if result.get("status") == "succeeded":
                 _mark_done(conn, job.id)
@@ -220,17 +221,17 @@ def _process_jobs(
                 )
             continue
         except Exception as exc:  # noqa: BLE001
-            error_message = str(exc)
-            retryable = _is_retryable_error(error_message)
-            _mark_failed(conn, job, error_message, retryable, max_attempts, run_after_column)
-            logger.error(
-                "job_failed job_id=%s news_event_id=%s attempts=%s retryable=%s error=%s",
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            error_message = f"unexpected_error: {exc}"
+            logger.exception(
+                "job_failed job_id=%s news_event_id=%s attempts=%s error=%s duration_ms=%s",
                 job.id,
                 job.news_event_id,
                 job.attempts + 1,
-                retryable,
                 error_message,
+                duration_ms,
             )
+            _mark_failed(conn, job, error_message, True, max_attempts, run_after_column)
 
 
 def _get_run_after_column(conn) -> str:
@@ -270,8 +271,7 @@ def main() -> int:
     poll_seconds = int(os.getenv("WORKER_POLL_SECONDS", str(args.poll_interval)))
     visibility_timeout = int(os.getenv("WORKER_VISIBILITY_TIMEOUT_SECONDS", "300"))
     max_attempts = int(os.getenv("WORKER_MAX_ATTEMPTS", "3"))
-
-    job_types = ("llm_analysis_company", "llm_analysis")
+    job_types = ("llm_analysis_market",)
 
     with _connect_db() as conn:
         run_after_column = _get_run_after_column(conn)

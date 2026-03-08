@@ -61,6 +61,85 @@ class AnalysisResult(BaseModel):
         return summary
 
 
+class MarketAnalysisResult(BaseModel):
+    main_topic: str
+    topic_key: str
+    topic_type: str
+    direction: str
+    summary: str
+    affected_assets: list[Any] = Field(default_factory=list)
+    market_relevance_score: float
+
+    model_config = {
+        "extra": "forbid",
+        "strict": True,
+    }
+
+    @field_validator("main_topic")
+    @classmethod
+    def _validate_main_topic(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("main_topic must be a string")
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("main_topic must be non-empty")
+        return cleaned
+
+    @field_validator("topic_key")
+    @classmethod
+    def _validate_topic_key(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("topic_key must be a string")
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("topic_key must be non-empty")
+        return cleaned
+
+    @field_validator("topic_type")
+    @classmethod
+    def _validate_topic_type(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("topic_type must be a string")
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("topic_type must be non-empty")
+        return cleaned
+
+    @field_validator("direction")
+    @classmethod
+    def _validate_direction(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("direction must be a string")
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("direction must be non-empty")
+        return cleaned
+
+    @field_validator("summary")
+    @classmethod
+    def _validate_summary(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("summary must be a string")
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("summary must be non-empty")
+        return cleaned
+
+    @field_validator("affected_assets")
+    @classmethod
+    def _validate_assets(cls, value: list[Any]) -> list[Any]:
+        if not isinstance(value, list):
+            raise ValueError("affected_assets must be a list")
+        return value
+
+    @field_validator("market_relevance_score")
+    @classmethod
+    def _validate_score(cls, value: float) -> float:
+        if value < 0 or value > 1:
+            raise ValueError("market_relevance_score must be between 0 and 1")
+        return value
+
+
 @dataclass(frozen=True)
 class LLMProviderResponse:
     output_text: str
@@ -107,10 +186,43 @@ def build_prompt(input_text: str) -> str:
     )
 
 
+def build_market_prompt(input_text: str) -> str:
+    return (
+        "You are a market news analyst. "
+        "Analyze the news below and output ONLY valid JSON with keys: "
+        "main_topic, topic_key, topic_type, direction, summary, affected_assets, "
+        "market_relevance_score. "
+        "main_topic must be short, stable, and reusable (avoid headline-like wording). "
+        "Prefer canonical themes like memory pricing, AI infrastructure spending, "
+        "Fed policy shift, gold rally. "
+        "topic_key should be lowercase snake_case derived from main_topic. "
+        "direction must be bullish|bearish|neutral|mixed. "
+        "affected_assets should be a list of symbols or objects like "
+        '{"symbol":"MU","confidence":0.9}. '
+        "market_relevance_score must be 0..1. "
+        "No markdown, no extra text.\n\n"
+        f"NEWS:\n{input_text}\n"
+    )
+
+
 def build_retry_prompt(input_text: str) -> str:
     template = (
         '{"tickers":["AAPL"],"sentiment":"neutral","confidence":0.5,'
         '"reasoning_summary":"Short reason."}'
+    )
+    return (
+        "STRICT MODE: Output ONLY JSON matching this exact schema. "
+        "Do not include any extra keys, markdown, or commentary.\n"
+        f"TEMPLATE:\n{template}\n\n"
+        f"NEWS:\n{input_text}\n"
+    )
+
+
+def build_market_retry_prompt(input_text: str) -> str:
+    template = (
+        '{"main_topic":"memory pricing","topic_key":"memory_pricing","topic_type":"sector",'
+        '"direction":"neutral","summary":"Brief summary.","affected_assets":[{"symbol":"MU","confidence":0.7}],'
+        '"market_relevance_score":0.5}'
     )
     return (
         "STRICT MODE: Output ONLY JSON matching this exact schema. "
@@ -125,6 +237,13 @@ def parse_analysis_json(text: str) -> tuple[AnalysisResult, dict[str, Any]]:
     if not isinstance(payload, dict):
         raise ValueError("JSON root must be an object")
     return AnalysisResult.model_validate(payload), payload
+
+
+def parse_market_analysis_json(text: str) -> tuple[MarketAnalysisResult, dict[str, Any]]:
+    payload = json.loads(text)
+    if not isinstance(payload, dict):
+        raise ValueError("JSON root must be an object")
+    return MarketAnalysisResult.model_validate(payload), payload
 
 
 class LLMClient:
@@ -180,6 +299,111 @@ class LLMClient:
                 output_text = provider_response.output_text
                 response_payload = provider_response.response
                 result, output_json = parse_analysis_json(output_text)
+                self.last_attempts.append(
+                    LLMRunAttempt(
+                        prompt=prompt,
+                        output_text=output_text,
+                        output_json=output_json,
+                        response=response_payload,
+                        error=None,
+                    )
+                )
+                self.last_raw_output = {
+                    "error": None,
+                    "response": response_payload,
+                    "output_text": output_text,
+                    "output_json": output_json,
+                }
+                logger.info(
+                    "llm_attempt_success provider=%s model=%s attempt=%s",
+                    self.provider_name,
+                    self.model,
+                    attempt + 1,
+                )
+                return result
+            except ProviderError as exc:
+                error = f"provider_error:{exc.code}:{exc}" if exc.code else f"provider_error:{exc}"
+                self.last_attempts.append(
+                    LLMRunAttempt(
+                        prompt=prompt,
+                        output_text=output_text,
+                        output_json=None,
+                        response=response_payload,
+                        error=error,
+                    )
+                )
+                logger.warning(
+                    "llm_attempt_failed provider=%s model=%s attempt=%s error=%s output_snippet=%s",
+                    self.provider_name,
+                    self.model,
+                    attempt + 1,
+                    error,
+                    (output_text or "")[:200],
+                )
+                if exc.code == "insufficient_quota":
+                    raise LLMAnalysisError("LLM analysis failed", self.last_attempts)
+                continue
+            except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+                error = str(exc)
+            except Exception as exc:  # noqa: BLE001
+                error = f"provider_error: {exc}"
+
+            self.last_attempts.append(
+                LLMRunAttempt(
+                    prompt=prompt,
+                    output_text=output_text,
+                    output_json=output_json,
+                    response=response_payload,
+                    error=error,
+                )
+            )
+            logger.warning(
+                "llm_attempt_failed provider=%s model=%s attempt=%s error=%s output_snippet=%s",
+                self.provider_name,
+                self.model,
+                attempt + 1,
+                error,
+                (output_text or "")[:200],
+            )
+
+        raise LLMAnalysisError("LLM analysis failed", self.last_attempts)
+
+    def analyze_market_news(self, input_text: str) -> MarketAnalysisResult:
+        self.last_attempts = []
+        self.last_request = None
+        self.last_raw_output = None
+        prompts: Iterable[str] = [build_market_prompt(input_text)]
+        retry_prompt = build_market_retry_prompt(input_text)
+        logger = logging.getLogger(__name__)
+
+        for attempt in range(self._max_retries + 1):
+            if attempt > 0:
+                time.sleep(2)
+            prompt = prompts[0] if attempt == 0 else retry_prompt
+            self.last_request = {
+                "prompt": prompt,
+                "provider": self.provider_name,
+                "model": self.model,
+                "timeout_seconds": self._timeout_seconds,
+                "max_retries": self._max_retries,
+                "temperature": None,
+                "max_tokens": None,
+            }
+            output_text: str | None = None
+            output_json: dict[str, Any] | None = None
+            response_payload: dict[str, Any] | None = None
+            error: str | None = None
+            try:
+                logger.info(
+                    "llm_attempt provider=%s model=%s attempt=%s",
+                    self.provider_name,
+                    self.model,
+                    attempt + 1,
+                )
+                provider_response = self._provider.generate(prompt, self._timeout_seconds)
+                output_text = provider_response.output_text
+                response_payload = provider_response.response
+                result, output_json = parse_market_analysis_json(output_text)
                 self.last_attempts.append(
                     LLMRunAttempt(
                         prompt=prompt,

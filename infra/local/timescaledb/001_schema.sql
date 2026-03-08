@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS llm_analyses (
   analysis_uuid   UUID NOT NULL DEFAULT gen_random_uuid(),
 
   news_event_id   BIGINT NOT NULL REFERENCES news_events(id) ON DELETE CASCADE,
+  analysis_job_id BIGINT NULL REFERENCES analysis_jobs(id) ON DELETE SET NULL,
   trace_id        UUID NOT NULL,          -- same trace_id used in this processing run
 
   provider        TEXT NOT NULL,          -- openai / gemini
@@ -213,6 +214,7 @@ COMMENT ON TABLE llm_analyses IS 'LLM analysis results (raw output + parsed fiel
 COMMENT ON COLUMN llm_analyses.id IS 'Surrogate primary key';
 COMMENT ON COLUMN llm_analyses.analysis_uuid IS 'Stable UUID for an analysis row';
 COMMENT ON COLUMN llm_analyses.news_event_id IS 'FK to news_events.id';
+COMMENT ON COLUMN llm_analyses.analysis_job_id IS 'FK to analysis_jobs.id (nullable)';
 COMMENT ON COLUMN llm_analyses.trace_id IS 'Correlation ID for the processing run';
 COMMENT ON COLUMN llm_analyses.provider IS 'LLM provider name';
 COMMENT ON COLUMN llm_analyses.model IS 'Exact model identifier';
@@ -227,6 +229,7 @@ COMMENT ON COLUMN llm_analyses.raw_output IS 'Normalized raw output object for d
 
 CREATE INDEX IF NOT EXISTS idx_analysis_news_event_created_at
   ON llm_analyses (news_event_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analysis_job_id ON llm_analyses (analysis_job_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_created_at ON llm_analyses (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_analysis_sentiment_created_at
   ON llm_analyses (sentiment, created_at DESC);

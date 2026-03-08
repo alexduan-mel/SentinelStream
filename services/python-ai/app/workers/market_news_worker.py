@@ -19,6 +19,7 @@ from ingestion.market_news_ingestion import (
     parse_market_news_payload,
 )
 from ingestion.news_event_store import upsert_news_event
+from jobs.publisher import publish_job
 
 
 def _configure_logging() -> None:
@@ -142,6 +143,8 @@ def main() -> int:
             deduped_count = 0
             skipped_count = 0
             error_count = 0
+            jobs_enqueued_count = 0
+            jobs_skipped_count = 0
             now = datetime.now(timezone.utc)
 
             try:
@@ -169,11 +172,16 @@ def main() -> int:
                             if max_source_event_id is not None and source_event_id <= max_source_event_id:
                                 skipped_count += 1
                                 continue
-                            _event_id, inserted = upsert_news_event(conn, event)
+                            event_id, inserted = upsert_news_event(conn, event)
                             if inserted:
                                 inserted_count += 1
                             else:
                                 deduped_count += 1
+                            job_inserted = publish_job(conn, event_id, trace_id, job_type="llm_analysis_market")
+                            if job_inserted:
+                                jobs_enqueued_count += 1
+                            else:
+                                jobs_skipped_count += 1
                         except MarketNewsNormalizationError:
                             skipped_count += 1
                         except psycopg2.Error:
@@ -205,7 +213,7 @@ def main() -> int:
 
             logger.info(
                 "market_news_poll_complete trace_id=%s categories=%s fetch_count=%s inserted_count=%s "
-                "deduped_count=%s skipped_count=%s error_count=%s",
+                "deduped_count=%s skipped_count=%s error_count=%s jobs_enqueued_count=%s jobs_skipped_count=%s",
                 trace_id,
                 categories,
                 fetched_count,
@@ -213,6 +221,8 @@ def main() -> int:
                 deduped_count,
                 skipped_count,
                 error_count,
+                jobs_enqueued_count,
+                jobs_skipped_count,
             )
 
             if args.once:

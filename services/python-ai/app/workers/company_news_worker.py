@@ -407,7 +407,7 @@ def main() -> int:
                 news_upsert_count += 1
                 if inserted:
                     news_inserted_count += 1
-                job_inserted = publish_job(conn, event_id, trace_id)
+                job_inserted = publish_job(conn, event_id, trace_id, job_type="llm_analysis_company")
                 if job_inserted:
                     jobs_enqueued_count += 1
                 else:

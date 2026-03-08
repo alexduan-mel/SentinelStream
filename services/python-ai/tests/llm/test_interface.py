@@ -1,6 +1,6 @@
 import pytest
 
-from llm.interface import LLMClient, LLMProvider, AnalysisResult
+from llm.interface import LLMClient, AnalysisResult, LLMProviderResponse
 
 
 class FakeProvider:
@@ -10,8 +10,8 @@ class FakeProvider:
     def __init__(self, outputs):
         self._outputs = list(outputs)
 
-    def generate(self, prompt: str, timeout_seconds: int) -> str:
-        return self._outputs.pop(0)
+    def generate(self, prompt: str, timeout_seconds: int) -> LLMProviderResponse:
+        return LLMProviderResponse(output_text=self._outputs.pop(0), response=None)
 
 
 def test_parse_valid_json():

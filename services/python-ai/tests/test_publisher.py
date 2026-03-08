@@ -66,7 +66,7 @@ def test_publish_job_dedup(db_conn):
     with db_conn.cursor() as cursor:
         cursor.execute(
             "SELECT COUNT(*), MIN(id) FROM analysis_jobs WHERE news_event_id = %s AND job_type = %s",
-            (news_event_id, "llm_analysis"),
+            (news_event_id, "llm_analysis_company"),
         )
         count = cursor.fetchone()[0]
     assert count == 1

@@ -32,6 +32,16 @@ def analyze_news_event_endpoint(news_event_id: int) -> AnalysisResponse:
             error_message=result.get("error_message"),
         )
 
+    if result.get("analysis_kind") == "market":
+        return AnalysisResponse(
+            analysis_id=result.get("analysis_id"),
+            status="succeeded",
+            tickers=[],
+            sentiment=result.get("sentiment"),
+            confidence=result.get("impact_score"),
+            reasoning_summary=result.get("summary"),
+        )
+
     analysis: AnalysisResult = result.get("result")
     return AnalysisResponse(
         analysis_id=result.get("analysis_id"),
