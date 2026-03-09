@@ -70,13 +70,13 @@ docker compose run --rm python-ai python -m jobs.market_worker --once --batch-si
 
 Run once:
 ```bash
-docker compose run --rm analysis-worker-market python -m jobs.market_pulse_worker --once
-docker compose run --rm python-ai python -m workers.market_pulse_worker --once
+docker compose run --rm analysis-worker-market python -m workers.market_aggregation_worker --once
+docker compose run --rm python-ai python -m workers.market_aggregation_worker --once
 ```
 
 Continuous:
 ```bash
-docker compose run --rm analysis-worker-market python -m jobs.market_pulse_worker
+docker compose run --rm analysis-worker-market python -m workers.market_aggregation_worker
 ```
 
 Config:

@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from market_pulse.aggregation import aggregate_market_pulse, connect_db
 
 
-JOB_NAME = "market_pulse_aggregation"
+JOB_NAME = "market_aggregation"
 
 
 def _configure_logging() -> None:
@@ -46,7 +46,7 @@ def main() -> int:
     args = _parse_args()
 
     poll_seconds = max(_get_env_int("MARKET_PULSE_POLL_SECONDS", 300), 1)
-    logger.info("market_pulse_worker_start poll_seconds=%s", poll_seconds)
+    logger.info("market_aggregation_worker_start poll_seconds=%s", poll_seconds)
 
     while True:
         trace_id = uuid4()
@@ -54,7 +54,7 @@ def main() -> int:
             with connect_db() as conn:
                 result = aggregate_market_pulse(conn)
             logger.info(
-                "market_pulse_aggregation_complete trace_id=%s analyses_scanned=%s skipped_low_relevance=%s "
+                "market_aggregation_complete trace_id=%s analyses_scanned=%s skipped_low_relevance=%s "
                 "matched_topics=%s matched_candidates=%s candidates_created=%s candidates_promoted=%s "
                 "mentions_created=%s asset_links_updated=%s",
                 trace_id,
@@ -68,7 +68,7 @@ def main() -> int:
                 result.get("asset_links_updated"),
             )
         except Exception as exc:  # noqa: BLE001
-            logger.exception("market_pulse_aggregation_failed trace_id=%s error=%s", trace_id, exc)
+            logger.exception("market_aggregation_failed trace_id=%s error=%s", trace_id, exc)
 
         if args.once:
             break
