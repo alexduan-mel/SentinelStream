@@ -1,0 +1,61 @@
+topics:
+  middle_east_geopolitical_risk:
+    aliases:
+      - middle_east_tensions
+      - middle_east_conflict
+      - geopolitical_tensions
+      - iran_conflict
+      - iran_airspace_control
+      - embassy_security_incident
+  china_us_geopolitical_tension:
+    aliases: []
+  global_trade_tensions:
+    aliases:
+      - tariff_dispute
+  global_oil_market_disruption:
+    aliases:
+      - oil_prices
+      - crude_oil_prices
+      - energy_prices
+      - energy_supply_disruption
+      - oil_supply_disruption
+      - oil_production_cut
+  gold_safe_haven_demand:
+    aliases: []
+  fed_policy_shift:
+    aliases: []
+  inflation_reacceleration:
+    aliases: []
+  growth_slowdown_risk:
+    aliases: []
+  geopolitical_market_volatility:
+    aliases:
+      - market_volatility
+  risk_off_rotation:
+    aliases: []
+  ai_infrastructure_spending:
+    aliases:
+      - ai_capex
+      - datacenter_spending
+      - gpu_demand
+  semiconductor_supply_demand:
+    aliases: []
+  memory_pricing:
+    aliases: []
+  defense_industry_expansion:
+    aliases:
+      - defense_production_increase
+      - drone_exports
+  airline_industry_disruption:
+    aliases: []
+  prediction_market_regulation:
+    aliases: []
+  ai_application_adoption:
+    aliases:
+      - ai_tools_accessibility
+      - ai_therapy_tools
+
+blocked_topics:
+  - child_development
+  - us_meme_war
+  - political_coalition

@@ -1,6 +1,7 @@
 package com.sentinelstream.entity;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,11 +14,17 @@ public class MarketPulseTopicEntity {
     @Id
     private Long id;
 
+    @Column(name = "topic_uuid", nullable = false)
+    private UUID topicUuid;
+
     @Column(name = "topic_key", nullable = false)
     private String topicKey;
 
-    @Column(name = "display_name")
+    @Column(name = "display_name", nullable = false)
     private String displayName;
+
+    @Column(name = "topic_family", nullable = false)
+    private String topicFamily;
 
     @Column(name = "topic_type")
     private String topicType;
@@ -28,8 +35,14 @@ public class MarketPulseTopicEntity {
     @Column(name = "summary")
     private String summary;
 
-    @Column(name = "intensity_score")
-    private Double intensityScore;
+    @Column(name = "status")
+    private String status;
+
+    @Column(name = "strength_score")
+    private Double strengthScore;
+
+    @Column(name = "novelty_score")
+    private Double noveltyScore;
 
     @Column(name = "confidence_score")
     private Double confidenceScore;
@@ -37,14 +50,17 @@ public class MarketPulseTopicEntity {
     @Column(name = "evidence_count")
     private Integer evidenceCount;
 
-    @Column(name = "status")
-    private String status;
-
     @Column(name = "first_seen_at")
     private OffsetDateTime firstSeenAt;
 
     @Column(name = "last_seen_at")
     private OffsetDateTime lastSeenAt;
+
+    @Column(name = "last_clustered_at")
+    private OffsetDateTime lastClusteredAt;
+
+    @Column(name = "source_candidate_id")
+    private Long sourceCandidateId;
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
@@ -59,12 +75,20 @@ public class MarketPulseTopicEntity {
         return id;
     }
 
+    public UUID getTopicUuid() {
+        return topicUuid;
+    }
+
     public String getTopicKey() {
         return topicKey;
     }
 
     public String getDisplayName() {
         return displayName;
+    }
+
+    public String getTopicFamily() {
+        return topicFamily;
     }
 
     public String getTopicType() {
@@ -79,8 +103,16 @@ public class MarketPulseTopicEntity {
         return summary;
     }
 
-    public Double getIntensityScore() {
-        return intensityScore;
+    public String getStatus() {
+        return status;
+    }
+
+    public Double getStrengthScore() {
+        return strengthScore;
+    }
+
+    public Double getNoveltyScore() {
+        return noveltyScore;
     }
 
     public Double getConfidenceScore() {
@@ -91,16 +123,20 @@ public class MarketPulseTopicEntity {
         return evidenceCount;
     }
 
-    public String getStatus() {
-        return status;
-    }
-
     public OffsetDateTime getFirstSeenAt() {
         return firstSeenAt;
     }
 
     public OffsetDateTime getLastSeenAt() {
         return lastSeenAt;
+    }
+
+    public OffsetDateTime getLastClusteredAt() {
+        return lastClusteredAt;
+    }
+
+    public Long getSourceCandidateId() {
+        return sourceCandidateId;
     }
 
     public OffsetDateTime getCreatedAt() {

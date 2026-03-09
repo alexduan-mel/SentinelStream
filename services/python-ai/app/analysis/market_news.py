@@ -1,30 +1,8 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from llm.interface import MarketAnalysisResult
-
-ALIAS_MAP = {
-    "dram_pricing": "memory_pricing",
-    "memory_chip_pricing": "memory_pricing",
-    "ai_capex": "ai_infrastructure_spending",
-    "datacenter_spending": "ai_infrastructure_spending",
-}
-
-
-def normalize_topic_key(main_topic: str) -> str:
-    if not isinstance(main_topic, str):
-        raise ValueError("main_topic must be a string")
-    raw = main_topic.strip().lower()
-    if not raw:
-        raise ValueError("main_topic must be non-empty")
-    raw = raw.replace("-", " ")
-    raw = re.sub(r"[^\w\s]", "", raw)
-    raw = re.sub(r"[\s_]+", "_", raw)
-    raw = raw.strip("_")
-    raw = re.sub(r"_+", "_", raw)
-    return ALIAS_MAP.get(raw, raw)
 
 
 def map_direction_to_sentiment(direction: str | None) -> str:
@@ -66,11 +44,11 @@ def map_affected_assets_to_entities(affected_assets: Any) -> list[dict[str, Any]
 
 
 def normalize_market_result(result: MarketAnalysisResult) -> dict[str, Any]:
-    topic_key = normalize_topic_key(result.main_topic)
     sentiment = map_direction_to_sentiment(result.direction)
     entities = map_affected_assets_to_entities(result.affected_assets)
     return {
-        "topic_key": topic_key,
+        "topic_family": result.topic_family.strip().lower(),
+        "subtopic_label": result.subtopic_label.strip(),
         "sentiment": sentiment,
         "entities": entities,
     }

@@ -1,6 +1,7 @@
 package com.sentinelstream.entity;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,6 +13,9 @@ import jakarta.persistence.Table;
 public class MarketPulseAssetLinkEntity {
     @Id
     private Long id;
+
+    @Column(name = "asset_link_uuid", nullable = false)
+    private UUID assetLinkUuid;
 
     @Column(name = "topic_id")
     private Long topicId;
@@ -28,14 +32,30 @@ public class MarketPulseAssetLinkEntity {
     @Column(name = "confidence_score")
     private Double confidenceScore;
 
+    @Column(name = "mention_count")
+    private Integer mentionCount;
+
+    @Column(name = "first_seen_at")
+    private OffsetDateTime firstSeenAt;
+
+    @Column(name = "last_seen_at")
+    private OffsetDateTime lastSeenAt;
+
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private OffsetDateTime updatedAt;
 
     protected MarketPulseAssetLinkEntity() {
     }
 
     public Long getId() {
         return id;
+    }
+
+    public UUID getAssetLinkUuid() {
+        return assetLinkUuid;
     }
 
     public Long getTopicId() {
@@ -58,7 +78,23 @@ public class MarketPulseAssetLinkEntity {
         return confidenceScore;
     }
 
+    public Integer getMentionCount() {
+        return mentionCount;
+    }
+
+    public OffsetDateTime getFirstSeenAt() {
+        return firstSeenAt;
+    }
+
+    public OffsetDateTime getLastSeenAt() {
+        return lastSeenAt;
+    }
+
     public OffsetDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
     }
 }

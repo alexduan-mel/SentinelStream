@@ -7,12 +7,7 @@ import psycopg2
 import pytest
 from psycopg2.extras import Json
 
-from market_pulse.aggregation import (
-    _compute_intensity,
-    _compute_status,
-    _extract_topic_fields,
-    aggregate_market_pulse,
-)
+from market_pulse.aggregation import aggregate_market_pulse
 
 
 def _db_conn():
@@ -59,17 +54,12 @@ def _insert_news_event(conn, published_at: datetime) -> int:
     return event_id
 
 
-def _insert_analysis(
-    conn,
-    news_event_id: int,
-    raw_output: dict,
-    entities: list[dict],
-    impact_score: float | None,
-) -> int:
+def _insert_analysis(conn, news_event_id: int, payload: dict, impact_score: float | None) -> int:
+    raw_output = {"normalized": payload}
     with conn.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO llm_analyses (news_event_id, trace_id, provider, model, status, raw_output, entities, impact_score) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            "INSERT INTO llm_analyses (news_event_id, trace_id, provider, model, status, raw_output, impact_score) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (
                 news_event_id,
                 str(uuid4()),
@@ -77,7 +67,6 @@ def _insert_analysis(
                 "gpt-4o-mini",
                 "succeeded",
                 Json(raw_output),
-                Json(entities),
                 impact_score,
             ),
         )
@@ -89,88 +78,227 @@ def _insert_analysis(
 def _cleanup(conn, news_event_ids: list[int]) -> None:
     with conn.cursor() as cursor:
         cursor.execute(
-            "DELETE FROM market_pulse_asset_links WHERE topic_id IN "
-            "(SELECT id FROM market_pulse_topics WHERE topic_key = %s)",
-            ("memory_pricing",),
+            "SELECT DISTINCT topic_id, candidate_id "
+            "FROM market_pulse_topic_mentions WHERE news_event_id = ANY(%s)",
+            (news_event_ids,),
         )
+        rows = cursor.fetchall()
+        topic_ids = [row[0] for row in rows if row[0] is not None]
+        candidate_ids = [row[1] for row in rows if row[1] is not None]
         cursor.execute(
-            "DELETE FROM market_pulse_topic_mentions WHERE topic_id IN "
-            "(SELECT id FROM market_pulse_topics WHERE topic_key = %s)",
-            ("memory_pricing",),
+            "DELETE FROM market_pulse_topic_mentions WHERE news_event_id = ANY(%s)",
+            (news_event_ids,),
         )
-        cursor.execute(
-            "DELETE FROM market_pulse_topics WHERE topic_key = %s",
-            ("memory_pricing",),
-        )
+        if topic_ids:
+            cursor.execute(
+                "DELETE FROM market_pulse_asset_links WHERE topic_id = ANY(%s)",
+                (topic_ids,),
+            )
+            cursor.execute("DELETE FROM market_pulse_topics WHERE id = ANY(%s)", (topic_ids,))
+        if candidate_ids:
+            cursor.execute(
+                "DELETE FROM market_pulse_candidates WHERE id = ANY(%s)",
+                (candidate_ids,),
+            )
         cursor.execute("DELETE FROM llm_analyses WHERE news_event_id = ANY(%s)", (news_event_ids,))
         cursor.execute("DELETE FROM news_events WHERE id = ANY(%s)", (news_event_ids,))
     conn.commit()
 
 
-def test_extract_topic_fields():
-    raw = {
-        "normalized": {
-            "topic_key": "memory_pricing",
-            "main_topic": "Memory pricing",
-            "topic_type": "sector",
-            "direction": "neutral",
-            "summary": "Prices stabilized",
-        }
+def _payload(topic_family: str, subtopic_label: str, summary: str, relevance: float, assets=None) -> dict:
+    return {
+        "topic_family": topic_family,
+        "subtopic_label": subtopic_label,
+        "topic_type": "macro",
+        "direction": "neutral",
+        "summary": summary,
+        "affected_assets": assets or [],
+        "market_relevance_score": relevance,
     }
-    parsed = _extract_topic_fields(raw)
-    assert parsed is not None
-    assert parsed.topic_key == "memory_pricing"
-    assert parsed.main_topic == "Memory pricing"
 
 
-def test_status_and_intensity_helpers():
-    now = datetime(2026, 3, 8, tzinfo=timezone.utc)
-    status = _compute_status(now, now - timedelta(hours=2), 2, 2, 0)
-    assert status == "new"
-    status = _compute_status(now, now - timedelta(days=2), 5, 3, 1)
-    assert status == "strengthening"
-    status = _compute_status(now, now - timedelta(days=2), 5, 1, 2)
-    assert status == "ongoing"
-
-    intensity = _compute_intensity(0, 0.9)
-    assert intensity == 0.0
-    intensity = _compute_intensity(5, 0.5)
-    assert 0.6 <= intensity <= 1.0
-
-
-def test_market_pulse_aggregation_idempotent():
+def test_low_relevance_skipped():
+    os.environ["MARKET_PULSE_MIN_RELEVANCE"] = "0.35"
     now = datetime.now(timezone.utc)
-    raw_output = {
-        "normalized": {
-            "topic_key": "memory_pricing",
-            "main_topic": "Memory pricing",
-            "topic_type": "sector",
-            "direction": "neutral",
-            "summary": "Prices stabilized",
-        }
-    }
-    entities = [{"symbol": "MU", "confidence": 0.9}, {"symbol": "WDC", "confidence": 0.6}]
+
+    with _db_conn() as conn:
+        event_id = _insert_news_event(conn, now - timedelta(hours=1))
+        _insert_analysis(conn, event_id, _payload("macro", "low relevance", "Minor update", 0.2), 0.2)
+
+        aggregate_market_pulse(conn, now=now)
+
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM market_pulse_candidates")
+            assert cursor.fetchone()[0] == 0
+
+        _cleanup(conn, [event_id])
+
+
+def test_family_isolation():
+    now = datetime.now(timezone.utc)
+    with _db_conn() as conn:
+        event1 = _insert_news_event(conn, now - timedelta(hours=1))
+        event2 = _insert_news_event(conn, now - timedelta(hours=1))
+        _insert_analysis(conn, event1, _payload("macro", "Policy shift", "Central bank hints", 0.6), 0.6)
+        _insert_analysis(conn, event2, _payload("energy", "Policy shift", "Central bank hints", 0.6), 0.6)
+
+        aggregate_market_pulse(conn, now=now)
+
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT topic_family, COUNT(*) FROM market_pulse_candidates GROUP BY topic_family")
+            rows = {row[0]: row[1] for row in cursor.fetchall()}
+            assert rows.get("macro") == 1
+            assert rows.get("energy") == 1
+
+        _cleanup(conn, [event1, event2])
+
+
+def test_similar_analyses_group_to_candidate():
+    now = datetime.now(timezone.utc)
+    with _db_conn() as conn:
+        event1 = _insert_news_event(conn, now - timedelta(hours=2))
+        event2 = _insert_news_event(conn, now - timedelta(hours=1))
+        _insert_analysis(conn, event1, _payload("macro", "Rates outlook", "Policy easing signals", 0.7), 0.7)
+        _insert_analysis(conn, event2, _payload("macro", "Rates outlook", "Policy easing signals", 0.7), 0.7)
+
+        aggregate_market_pulse(conn, now=now)
+
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*), MAX(evidence_count) FROM market_pulse_candidates")
+            count, evidence = cursor.fetchone()
+            assert count == 1
+            assert evidence >= 2
+
+        _cleanup(conn, [event1, event2])
+
+
+def test_dissimilar_analyses_create_separate_candidates():
+    now = datetime.now(timezone.utc)
+    with _db_conn() as conn:
+        event1 = _insert_news_event(conn, now - timedelta(hours=2))
+        event2 = _insert_news_event(conn, now - timedelta(hours=1))
+        _insert_analysis(conn, event1, _payload("macro", "Inflation surge", "Prices accelerating", 0.7), 0.7)
+        _insert_analysis(conn, event2, _payload("macro", "Growth slowdown", "Demand weakening", 0.7), 0.7)
+
+        aggregate_market_pulse(conn, now=now)
+
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM market_pulse_candidates")
+            assert cursor.fetchone()[0] == 2
+
+        _cleanup(conn, [event1, event2])
+
+
+def test_candidate_promotion_and_assets():
+    os.environ["MARKET_PULSE_PROMOTE_MIN_EVIDENCE"] = "2"
+    os.environ["MARKET_PULSE_PROMOTE_MIN_RELEVANCE"] = "0.55"
+    now = datetime.now(timezone.utc)
+    assets = [{"symbol": "MU", "confidence": 0.9}]
 
     with _db_conn() as conn:
         event1 = _insert_news_event(conn, now - timedelta(hours=2))
         event2 = _insert_news_event(conn, now - timedelta(hours=1))
-        _insert_analysis(conn, event1, raw_output, entities, 0.7)
-        _insert_analysis(conn, event2, raw_output, entities, 0.6)
+        _insert_analysis(conn, event1, _payload("semiconductors", "Memory pricing", "Demand steady", 0.8, assets), 0.8)
+        _insert_analysis(conn, event2, _payload("semiconductors", "Memory pricing", "Prices stable", 0.8, assets), 0.8)
+
+        aggregate_market_pulse(conn, now=now)
+
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT status, promoted_topic_id FROM market_pulse_candidates WHERE topic_family = %s",
+                ("semiconductors",),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            assert row[0] == "promoted"
+            topic_id = row[1]
+            assert topic_id is not None
+
+            cursor.execute("SELECT COUNT(*) FROM market_pulse_topics WHERE id = %s", (topic_id,))
+            assert cursor.fetchone()[0] == 1
+
+            cursor.execute("SELECT COUNT(*) FROM market_pulse_topic_mentions WHERE topic_id = %s", (topic_id,))
+            assert cursor.fetchone()[0] >= 2
+
+            cursor.execute("SELECT COUNT(*) FROM market_pulse_asset_links WHERE topic_id = %s", (topic_id,))
+            assert cursor.fetchone()[0] == 1
+
+        _cleanup(conn, [event1, event2])
+
+
+def test_idempotent_mentions_and_assets():
+    now = datetime.now(timezone.utc)
+    assets = [{"symbol": "MU", "confidence": 0.9}]
+
+    with _db_conn() as conn:
+        event1 = _insert_news_event(conn, now - timedelta(hours=2))
+        event2 = _insert_news_event(conn, now - timedelta(hours=1))
+        _insert_analysis(conn, event1, _payload("semiconductors", "Memory pricing", "Demand steady", 0.8, assets), 0.8)
+        _insert_analysis(conn, event2, _payload("semiconductors", "Memory pricing", "Prices stable", 0.8, assets), 0.8)
 
         aggregate_market_pulse(conn, now=now)
         aggregate_market_pulse(conn, now=now)
 
         with conn.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*), MIN(evidence_count), MAX(status) FROM market_pulse_topics")
-            topic_row = cursor.fetchone()
-            assert topic_row[0] == 1
-            assert topic_row[1] == 2
-            assert topic_row[2] in {"new", "ongoing", "strengthening"}
-
             cursor.execute("SELECT COUNT(*) FROM market_pulse_topic_mentions")
-            assert cursor.fetchone()[0] == 2
-
+            mentions = cursor.fetchone()[0]
             cursor.execute("SELECT COUNT(*) FROM market_pulse_asset_links")
-            assert cursor.fetchone()[0] == 2
+            assets_count = cursor.fetchone()[0]
+        assert mentions >= 2
+        assert assets_count == 1
+
+        _cleanup(conn, [event1, event2])
+
+
+def test_mentions_attach_to_candidate_then_topic():
+    os.environ["MARKET_PULSE_PROMOTE_MIN_EVIDENCE"] = "2"
+    os.environ["MARKET_PULSE_PROMOTE_MIN_RELEVANCE"] = "0.55"
+    now = datetime.now(timezone.utc)
+    with _db_conn() as conn:
+        event1 = _insert_news_event(conn, now - timedelta(hours=3))
+        event2 = _insert_news_event(conn, now - timedelta(hours=2))
+        event3 = _insert_news_event(conn, now - timedelta(hours=1))
+        analysis1 = _insert_analysis(conn, event1, _payload("macro", "Rates outlook", "Policy easing", 0.7), 0.7)
+        analysis2 = _insert_analysis(conn, event2, _payload("macro", "Rates outlook", "Policy easing", 0.7), 0.7)
+        analysis3 = _insert_analysis(conn, event3, _payload("macro", "Rates outlook", "Policy easing", 0.7), 0.7)
+
+        aggregate_market_pulse(conn, now=now)
+
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT topic_id, candidate_id FROM market_pulse_topic_mentions WHERE llm_analysis_id = %s",
+                (analysis1,),
+            )
+            rows1 = cursor.fetchall()
+            assert any(row[1] is not None for row in rows1)
+
+            cursor.execute(
+                "SELECT topic_id, candidate_id FROM market_pulse_topic_mentions WHERE llm_analysis_id = %s",
+                (analysis3,),
+            )
+            rows3 = cursor.fetchall()
+            assert any(row[0] is not None for row in rows3)
+
+        _cleanup(conn, [event1, event2, event3])
+
+
+def test_promoted_candidate_not_promoted_twice():
+    os.environ["MARKET_PULSE_PROMOTE_MIN_EVIDENCE"] = "2"
+    os.environ["MARKET_PULSE_PROMOTE_MIN_RELEVANCE"] = "0.55"
+    now = datetime.now(timezone.utc)
+    with _db_conn() as conn:
+        event1 = _insert_news_event(conn, now - timedelta(hours=2))
+        event2 = _insert_news_event(conn, now - timedelta(hours=1))
+        _insert_analysis(conn, event1, _payload("semiconductors", "Memory pricing", "Demand steady", 0.8), 0.8)
+        _insert_analysis(conn, event2, _payload("semiconductors", "Memory pricing", "Prices stable", 0.8), 0.8)
+
+        aggregate_market_pulse(conn, now=now)
+        aggregate_market_pulse(conn, now=now)
+
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM market_pulse_topics")
+            assert cursor.fetchone()[0] == 1
+            cursor.execute("SELECT COUNT(*) FROM market_pulse_candidates WHERE status = 'promoted'")
+            assert cursor.fetchone()[0] == 1
 
         _cleanup(conn, [event1, event2])

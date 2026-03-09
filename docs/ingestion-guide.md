@@ -22,6 +22,10 @@ docker compose run --rm python-ai \
 # Replay-only: skip fetch and reprocess raw_news_items
 docker compose run --rm python-ai \
   python -m workers.company_news_worker --replay-only --process-limit 200
+
+# Market news (one-shot)
+docker compose run --rm python-ai \
+  python -m workers.market_news_worker --once
 ```
 
 ### Run locally (outside Docker)
@@ -31,6 +35,11 @@ pip install -r services/python-ai/requirements.txt
 PYTHONPATH=services/python-ai/app \
   POSTGRES_HOST=localhost POSTGRES_PORT=5433 \
   python -m workers.company_news_worker --tickers AAPL MSFT --minutes-back 60 --process-limit 200
+
+# Market news (one-shot)
+PYTHONPATH=services/python-ai/app \
+  POSTGRES_HOST=localhost POSTGRES_PORT=5433 \
+  python -m workers.market_news_worker --once
 ```
 
 Notes:

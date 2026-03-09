@@ -32,9 +32,10 @@ public class MarketPulseRepository {
     public MarketPulseOverviewResponse fetchOverview(int topLimit) {
         String countSql = """
             SELECT COUNT(*) AS active_theme_count,
-                   COUNT(*) FILTER (WHERE status = 'new') AS new_theme_count,
+                   COUNT(*) FILTER (WHERE status = 'candidate') AS new_theme_count,
                    COUNT(*) FILTER (WHERE status = 'strengthening') AS strengthening_theme_count
             FROM market_pulse_topics
+            WHERE status != 'archived'
             """;
         LOGGER.info("market_pulse_overview_count_sql={}", countSql);
         var counts = jdbcTemplate.queryForObject(countSql, (rs, rowNum) -> new int[] {
@@ -64,7 +65,7 @@ public class MarketPulseRepository {
                    t.topic_type,
                    t.direction,
                    t.status,
-                   t.intensity_score,
+                   t.strength_score AS intensity_score,
                    t.summary,
                    t.evidence_count,
                    t.first_seen_at,
@@ -128,7 +129,7 @@ public class MarketPulseRepository {
                    t.topic_key,
                    t.display_name,
                    t.status,
-                   t.intensity_score,
+                   t.strength_score AS intensity_score,
                    t.summary,
                    t.evidence_count,
                    t.last_seen_at,
@@ -137,7 +138,7 @@ public class MarketPulseRepository {
             FROM market_pulse_topics t
             LEFT JOIN market_pulse_asset_links l ON l.topic_id = t.id
             GROUP BY t.id
-            ORDER BY t.intensity_score DESC NULLS LAST, t.last_seen_at DESC NULLS LAST
+            ORDER BY t.strength_score DESC NULLS LAST, t.last_seen_at DESC NULLS LAST
             """;
         if (limit != null) {
             sql += " LIMIT " + limit;
@@ -154,7 +155,7 @@ public class MarketPulseRepository {
                    t.topic_type,
                    t.direction,
                    t.status,
-                   t.intensity_score,
+                   t.strength_score AS intensity_score,
                    t.summary,
                    t.evidence_count,
                    t.last_seen_at,
@@ -163,7 +164,7 @@ public class MarketPulseRepository {
             FROM market_pulse_topics t
             LEFT JOIN market_pulse_asset_links l ON l.topic_id = t.id
             GROUP BY t.id
-            ORDER BY t.intensity_score DESC NULLS LAST, t.last_seen_at DESC NULLS LAST
+            ORDER BY t.strength_score DESC NULLS LAST, t.last_seen_at DESC NULLS LAST
             """;
         if (limit != null) {
             sql += " LIMIT " + limit;

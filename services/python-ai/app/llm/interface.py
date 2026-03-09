@@ -62,12 +62,12 @@ class AnalysisResult(BaseModel):
 
 
 class MarketAnalysisResult(BaseModel):
-    main_topic: str
-    topic_key: str
+    topic_family: str
+    subtopic_label: str
     topic_type: str
     direction: str
     summary: str
-    affected_assets: list[Any] = Field(default_factory=list)
+    affected_assets: list[object] = Field(default_factory=list)
     market_relevance_score: float
 
     model_config = {
@@ -75,24 +75,49 @@ class MarketAnalysisResult(BaseModel):
         "strict": True,
     }
 
-    @field_validator("main_topic")
+    @field_validator("topic_family")
     @classmethod
-    def _validate_main_topic(cls, value: str) -> str:
+    def _validate_topic_family(cls, value: str) -> str:
         if not isinstance(value, str):
-            raise ValueError("main_topic must be a string")
+            raise ValueError("topic_family must be a string")
         cleaned = value.strip()
         if not cleaned:
-            raise ValueError("main_topic must be non-empty")
+            raise ValueError("topic_family must be non-empty")
+        allowed = {
+            "geopolitics",
+            "energy",
+            "macro",
+            "rates",
+            "regulation",
+            "ai",
+            "semiconductors",
+            "internet_software",
+            "defense",
+            "aerospace_space",
+            "transport",
+            "commodities",
+            "financials",
+            "healthcare",
+            "consumer",
+            "industrials",
+            "market_structure",
+            "other",
+        }
+        cleaned = cleaned.lower()
+        if cleaned not in allowed:
+            raise ValueError("topic_family must be a supported value")
         return cleaned
 
-    @field_validator("topic_key")
+    @field_validator("subtopic_label")
     @classmethod
-    def _validate_topic_key(cls, value: str) -> str:
+    def _validate_subtopic_label(cls, value: str) -> str:
         if not isinstance(value, str):
-            raise ValueError("topic_key must be a string")
+            raise ValueError("subtopic_label must be a string")
         cleaned = value.strip()
         if not cleaned:
-            raise ValueError("topic_key must be non-empty")
+            raise ValueError("subtopic_label must be non-empty")
+        if len(cleaned) > 120:
+            raise ValueError("subtopic_label must be <= 120 chars")
         return cleaned
 
     @field_validator("topic_type")
@@ -127,7 +152,7 @@ class MarketAnalysisResult(BaseModel):
 
     @field_validator("affected_assets")
     @classmethod
-    def _validate_assets(cls, value: list[Any]) -> list[Any]:
+    def _validate_assets(cls, value: list[object]) -> list[object]:
         if not isinstance(value, list):
             raise ValueError("affected_assets must be a list")
         return value
@@ -187,21 +212,45 @@ def build_prompt(input_text: str) -> str:
 
 
 def build_market_prompt(input_text: str) -> str:
+    title = ""
+    url = ""
+    publisher = ""
+    content = ""
+    for line in input_text.splitlines():
+        if line.startswith("Title:"):
+            title = line.replace("Title:", "", 1).strip()
+        elif line.startswith("URL:"):
+            url = line.replace("URL:", "", 1).strip()
+        elif line.startswith("Publisher:"):
+            publisher = line.replace("Publisher:", "", 1).strip()
+        elif line.startswith("Content:"):
+            content = line.replace("Content:", "", 1).strip()
+
     return (
-        "You are a market news analyst. "
-        "Analyze the news below and output ONLY valid JSON with keys: "
-        "main_topic, topic_key, topic_type, direction, summary, affected_assets, "
-        "market_relevance_score. "
-        "main_topic must be short, stable, and reusable (avoid headline-like wording). "
-        "Prefer canonical themes like memory pricing, AI infrastructure spending, "
-        "Fed policy shift, gold rally. "
-        "topic_key should be lowercase snake_case derived from main_topic. "
-        "direction must be bullish|bearish|neutral|mixed. "
-        "affected_assets should be a list of symbols or objects like "
-        '{"symbol":"MU","confidence":0.9}. '
-        "market_relevance_score must be 0..1. "
-        "No markdown, no extra text.\n\n"
-        f"NEWS:\n{input_text}\n"
+        "You are a market news analyst.\n\n"
+        "Analyze the market news article and output ONLY valid JSON with exactly these keys:\n"
+        "topic_family, subtopic_label, topic_type, direction, summary, affected_assets, market_relevance_score\n\n"
+        "Rules:\n"
+        "- topic_family must be exactly one of:\n"
+        "  geopolitics, energy, macro, rates, regulation, ai, semiconductors, internet_software, defense, aerospace_space, transport, commodities, financials, healthcare, consumer, industrials, market_structure, other\n"
+        "- subtopic_label must be a short reusable news-level narrative phrase\n"
+        "- subtopic_label must not be a full headline\n"
+        "- subtopic_label must not be a final canonical market topic\n"
+        "- do not generate final canonical market topics\n"
+        "- focus on market impact rather than article wording\n"
+        "- classify by the main market narrative, not strictly by company name\n"
+        "- topic_type should be a compact label such as equity, macro, commodity, policy, geopolitics, sector, other\n"
+        "- direction must be exactly one of: bullish, bearish, neutral, mixed\n"
+        "- market_relevance_score must be between 0 and 1\n"
+        "- affected_assets should be a list of symbols or objects like {\"symbol\":\"MU\",\"confidence\":0.9}\n"
+        "- return JSON only\n"
+        "- no markdown\n"
+        "- no extra text\n\n"
+        "NEWS:\n"
+        f"Title: {title}\n"
+        f"URL: {url}\n"
+        f"Publisher: {publisher}\n"
+        f"Content: {content}\n"
     )
 
 
@@ -220,9 +269,9 @@ def build_retry_prompt(input_text: str) -> str:
 
 def build_market_retry_prompt(input_text: str) -> str:
     template = (
-        '{"main_topic":"memory pricing","topic_key":"memory_pricing","topic_type":"sector",'
-        '"direction":"neutral","summary":"Brief summary.","affected_assets":[{"symbol":"MU","confidence":0.7}],'
-        '"market_relevance_score":0.5}'
+        '{"topic_family":"semiconductors","subtopic_label":"memory pricing",'
+        '"topic_type":"sector","direction":"neutral","summary":"Brief summary.",'
+        '"affected_assets":[{"symbol":"MU","confidence":0.7}],"market_relevance_score":0.5}'
     )
     return (
         "STRICT MODE: Output ONLY JSON matching this exact schema. "

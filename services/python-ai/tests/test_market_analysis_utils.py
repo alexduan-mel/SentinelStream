@@ -1,18 +1,25 @@
+import pytest
+from pydantic import ValidationError
+
 from analysis.market_news import (
     map_affected_assets_to_entities,
     map_direction_to_sentiment,
     normalize_market_result,
-    normalize_topic_key,
 )
 from llm.interface import MarketAnalysisResult
 
 
-def test_topic_key_normalization_and_aliases():
-    assert normalize_topic_key("Memory pricing") == "memory_pricing"
-    assert normalize_topic_key("AI-capex") == "ai_infrastructure_spending"
-    assert normalize_topic_key("datacenter spending") == "ai_infrastructure_spending"
-    assert normalize_topic_key("Fed policy shift") == "fed_policy_shift"
-    assert normalize_topic_key("Gold rally!") == "gold_rally"
+def test_topic_family_validation():
+    with pytest.raises(ValidationError):
+        MarketAnalysisResult(
+            topic_family="unknown",
+            subtopic_label="Random",
+            topic_type="misc",
+            direction="neutral",
+            summary="Regional tensions.",
+            affected_assets=[],
+            market_relevance_score=0.6,
+        )
 
 
 def test_direction_mapping():
@@ -41,8 +48,8 @@ def test_affected_assets_mapping():
 
 def test_normalize_market_result_output():
     result = MarketAnalysisResult(
-        main_topic="Memory pricing",
-        topic_key="dram_pricing",
+        topic_family="semiconductors",
+        subtopic_label="Memory pricing",
         topic_type="sector",
         direction="neutral",
         summary="Prices stabilized.",
@@ -50,6 +57,7 @@ def test_normalize_market_result_output():
         market_relevance_score=0.4,
     )
     normalized = normalize_market_result(result)
-    assert normalized["topic_key"] == "memory_pricing"
+    assert normalized["topic_family"] == "semiconductors"
+    assert normalized["subtopic_label"] == "Memory pricing"
     assert normalized["sentiment"] == "neutral"
     assert normalized["entities"] == [{"symbol": "MU", "confidence": 0.5}]

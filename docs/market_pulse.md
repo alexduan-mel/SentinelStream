@@ -61,15 +61,30 @@ market_pulse_asset_links
 symbol (MU, SMH, NVDA...)
 
 ## Worker
+### llm analysis worker
+Run in python-ai container:
+```bash
+docker compose run --rm python-ai python -m jobs.market_worker --once --batch-size 10
+```
+### aggregation worker
+
 Run once:
 ```bash
-python -m workers.market_pulse_worker --once
+docker compose run --rm analysis-worker-market python -m jobs.market_pulse_worker --once
+docker compose run --rm python-ai python -m workers.market_pulse_worker --once
 ```
+
 Continuous:
 ```bash
-python -m workers.market_pulse_worker
+docker compose run --rm analysis-worker-market python -m jobs.market_pulse_worker
 ```
 
 Config:
 - `MARKET_PULSE_POLL_SECONDS` (default 300)
 - `LOG_LEVEL`
+
+Redis rate-limit keys (Docker):
+```bash
+docker compose exec redis redis-cli SET llm_rate_limit:market 5
+docker compose exec redis redis-cli SET llm_rate_limit:company 0
+```

@@ -77,15 +77,16 @@ public class MarketPulseRepositoryTest {
             );
 
             Long topicId = jdbcTemplate.queryForObject(
-                "INSERT INTO market_pulse_topics (topic_key, display_name, topic_type, direction, summary, status, evidence_count, first_seen_at, last_seen_at, intensity_score) "
-                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                "INSERT INTO market_pulse_topics (topic_key, display_name, topic_family, topic_type, direction, summary, status, evidence_count, first_seen_at, last_seen_at, strength_score) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
                 Long.class,
                 "memory_pricing",
                 "Memory pricing",
+                "semiconductors",
                 "sector",
                 "neutral",
                 "Prices stabilized",
-                "new",
+                "candidate",
                 2,
                 now.minusHours(2),
                 now.minusHours(1),
@@ -93,16 +94,18 @@ public class MarketPulseRepositoryTest {
             );
 
             jdbcTemplate.update(
-                "INSERT INTO market_pulse_topic_mentions (topic_id, news_event_id, relevance_score, reasoning_summary) VALUES (?, ?, ?, ?)",
+                "INSERT INTO market_pulse_topic_mentions (topic_id, news_event_id, topic_family, relevance_score, reasoning_summary) VALUES (?, ?, ?, ?, ?)",
                 topicId,
                 event1,
+                "semiconductors",
                 0.6,
                 "Mention 1"
             );
             jdbcTemplate.update(
-                "INSERT INTO market_pulse_topic_mentions (topic_id, news_event_id, relevance_score, reasoning_summary) VALUES (?, ?, ?, ?)",
+                "INSERT INTO market_pulse_topic_mentions (topic_id, news_event_id, topic_family, relevance_score, reasoning_summary) VALUES (?, ?, ?, ?, ?)",
                 topicId,
                 event2,
+                "semiconductors",
                 0.7,
                 "Mention 2"
             );

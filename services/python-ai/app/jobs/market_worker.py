@@ -246,6 +246,8 @@ def _process_jobs(
                     duration_ms,
                 )
             continue
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            raise
         except Exception as exc:  # noqa: BLE001
             duration_ms = int((time.monotonic() - start_time) * 1000)
             error_message = f"unexpected_error: {exc}"
@@ -257,7 +259,10 @@ def _process_jobs(
                 error_message,
                 duration_ms,
             )
-            _mark_failed(conn, job, error_message, True, max_attempts, run_after_column)
+            try:
+                _mark_failed(conn, job, error_message, True, max_attempts, run_after_column)
+            except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                raise
 
 
 def _get_run_after_column(conn) -> str:
@@ -305,35 +310,51 @@ def main() -> int:
         limiter.reset(limit)
         logger.info("llm_rate_limit_init scope=market limit=%s", limit)
 
-    with _connect_db() as conn:
-        run_after_column = _get_run_after_column(conn)
+    while running["value"]:
+        try:
+            with _connect_db() as conn:
+                run_after_column = _get_run_after_column(conn)
 
-        while running["value"]:
-            recovered = _recover_stuck_jobs(conn, visibility_timeout)
-            if recovered:
-                logger.info("worker_recovered_jobs count=%s", recovered)
+                while running["value"]:
+                    try:
+                        recovered = _recover_stuck_jobs(conn, visibility_timeout)
+                        if recovered:
+                            logger.info("worker_recovered_jobs count=%s", recovered)
 
-            batch_size = args.batch_size
-            if limiter is not None:
-                remaining = limiter.remaining()
-                if remaining <= 0:
-                    if args.once:
+                        batch_size = args.batch_size
+                        if limiter is not None:
+                            remaining = limiter.remaining()
+                            if remaining <= 0:
+                                if args.once:
+                                    return 0
+                                time.sleep(max(poll_seconds, 1))
+                                continue
+                            batch_size = min(batch_size, remaining)
+
+                        jobs = _claim_jobs(
+                            conn, batch_size, worker_id, max_attempts, run_after_column, job_types
+                        )
+                        if not jobs:
+                            if args.once:
+                                return 0
+                            time.sleep(max(poll_seconds, 1))
+                            continue
+
+                        _process_jobs(conn, jobs, logger, max_attempts, run_after_column, limiter)
+
+                        if args.once:
+                            return 0
+                    except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
+                        logger.error("db_connection_lost error=%s", exc)
                         break
-                    time.sleep(max(poll_seconds, 1))
-                    continue
-                batch_size = min(batch_size, remaining)
-
-            jobs = _claim_jobs(conn, batch_size, worker_id, max_attempts, run_after_column, job_types)
-            if not jobs:
-                if args.once:
-                    break
-                time.sleep(max(poll_seconds, 1))
-                continue
-
-            _process_jobs(conn, jobs, logger, max_attempts, run_after_column, limiter)
-
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
+            logger.error("db_connection_failed error=%s", exc)
             if args.once:
-                break
+                return 1
+
+        if args.once:
+            break
+        time.sleep(min(max(poll_seconds, 1), 30))
 
     return 0
 

@@ -54,12 +54,18 @@ def main() -> int:
             with connect_db() as conn:
                 result = aggregate_market_pulse(conn)
             logger.info(
-                "market_pulse_aggregation_complete trace_id=%s topics=%s mentions=%s assets=%s skipped=%s",
+                "market_pulse_aggregation_complete trace_id=%s analyses_scanned=%s skipped_low_relevance=%s "
+                "matched_topics=%s matched_candidates=%s candidates_created=%s candidates_promoted=%s "
+                "mentions_created=%s asset_links_updated=%s",
                 trace_id,
-                result.get("topics_upserted"),
-                result.get("mentions_inserted"),
-                result.get("assets_upserted"),
-                result.get("skipped"),
+                result.get("analyses_scanned"),
+                result.get("analyses_skipped_low_relevance"),
+                result.get("matched_existing_topics"),
+                result.get("matched_candidates"),
+                result.get("candidates_created"),
+                result.get("candidates_promoted"),
+                result.get("mentions_created"),
+                result.get("asset_links_updated"),
             )
         except Exception as exc:  # noqa: BLE001
             logger.exception("market_pulse_aggregation_failed trace_id=%s error=%s", trace_id, exc)
