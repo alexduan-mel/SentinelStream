@@ -14,6 +14,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import com.sentinelstream.dto.MarketPulseEvidenceResponse;
+import com.sentinelstream.dto.MarketPulseNarrativeResponse;
 import com.sentinelstream.dto.MarketPulseOverviewCardResponse;
 import com.sentinelstream.dto.MarketPulseOverviewResponse;
 import com.sentinelstream.dto.MarketPulseTopicCardResponse;
@@ -121,6 +122,79 @@ public class MarketPulseRepository {
             base.lastSeenAt(),
             evidence
         );
+    }
+
+    public List<MarketPulseNarrativeResponse> fetchNarratives(OffsetDateTime since, String assetClass, String sort) {
+        String assetClassCase = """
+            CASE
+              WHEN LOWER(COALESCE(t.topic_type, '')) IN ('macro','geopolitics','policy') THEN 'macro'
+              WHEN LOWER(COALESCE(t.topic_type, '')) IN ('commodity','commodities') THEN 'commodity'
+              WHEN LOWER(COALESCE(t.topic_type, '')) = 'crypto' THEN 'crypto'
+              WHEN LOWER(COALESCE(t.topic_family, '')) = 'macro' THEN 'macro'
+              WHEN LOWER(COALESCE(t.topic_family, '')) = 'crypto' THEN 'crypto'
+              WHEN LOWER(COALESCE(t.sector, '')) = 'macro' THEN 'macro'
+              WHEN LOWER(COALESCE(t.sector, '')) IN ('energy','materials') THEN 'commodity'
+              ELSE 'equity'
+            END
+            """;
+        String directionCase = """
+            CASE
+              WHEN LOWER(COALESCE(t.direction, '')) IN ('positive','bullish') THEN 'bullish'
+              WHEN LOWER(COALESCE(t.direction, '')) IN ('negative','bearish') THEN 'bearish'
+              ELSE 'neutral'
+            END
+            """;
+        String statusCase = """
+            CASE
+              WHEN t.status = 'candidate' THEN 'emerging'
+              WHEN t.status = 'strengthening' THEN 'developing'
+              WHEN t.status = 'active' THEN 'confirmed'
+              WHEN t.status = 'fading' THEN 'fading'
+              ELSE 'emerging'
+            END
+            """;
+        StringBuilder sql = new StringBuilder("""
+            SELECT t.id,
+                   t.display_name AS title,
+                   t.summary,
+            """);
+        sql.append(directionCase).append(" AS direction, ");
+        sql.append(statusCase).append(" AS status, ");
+        sql.append(assetClassCase).append(" AS asset_class, ");
+        sql.append("""
+                   t.sector AS sector,
+                   t.subtopic AS subtopic,
+                   COALESCE(t.strength_score, 0) AS signal_strength,
+                   COALESCE(t.novelty_score, 0) AS momentum,
+                   t.evidence_count AS source_count,
+                   NULL::INTEGER AS source_delta,
+                   t.last_seen_at AS last_updated_at,
+                   t.first_seen_at AS first_seen_at,
+                   COALESCE(array_remove(array_agg(DISTINCT l.asset_symbol ORDER BY l.asset_symbol), NULL), '{}')
+                     AS affected_assets
+            FROM market_pulse_topics t
+            LEFT JOIN market_pulse_asset_links l ON l.topic_id = t.id
+            WHERE t.status != 'archived'
+            """);
+        List<Object> params = new ArrayList<>();
+        if (since != null) {
+            sql.append(" AND t.last_seen_at >= ? ");
+            params.add(since);
+        }
+        if (assetClass != null && !"all".equals(assetClass)) {
+            sql.append(" AND ").append(assetClassCase).append(" = ? ");
+            params.add(assetClass);
+        }
+        sql.append(" GROUP BY t.id ");
+        if ("momentum".equals(sort)) {
+            sql.append(" ORDER BY momentum DESC NULLS LAST, signal_strength DESC NULLS LAST ");
+        } else if ("recent".equals(sort)) {
+            sql.append(" ORDER BY t.last_seen_at DESC NULLS LAST ");
+        } else {
+            sql.append(" ORDER BY signal_strength DESC NULLS LAST, t.last_seen_at DESC NULLS LAST ");
+        }
+        LOGGER.info("market_pulse_narratives_sql={}", sql);
+        return jdbcTemplate.query(sql.toString(), new MarketPulseNarrativeMapper(), params.toArray());
     }
 
     private List<MarketPulseOverviewCardResponse> fetchOverviewCards(Integer limit) {
@@ -258,6 +332,29 @@ public class MarketPulseRepository {
                 rs.getString("publisher"),
                 rs.getObject("published_at", OffsetDateTime.class),
                 rs.getString("url")
+            );
+        }
+    }
+
+    private static final class MarketPulseNarrativeMapper implements RowMapper<MarketPulseNarrativeResponse> {
+        @Override
+        public MarketPulseNarrativeResponse mapRow(ResultSet rs, int rowNum) throws SQLException {
+            return new MarketPulseNarrativeResponse(
+                rs.getLong("id"),
+                rs.getString("title"),
+                rs.getString("summary"),
+                rs.getString("direction"),
+                rs.getString("status"),
+                rs.getString("asset_class"),
+                rs.getString("sector"),
+                rs.getString("subtopic"),
+                (Double) rs.getObject("signal_strength"),
+                (Double) rs.getObject("momentum"),
+                (Integer) rs.getObject("source_count"),
+                (Integer) rs.getObject("source_delta"),
+                readStringArray(rs, "affected_assets"),
+                rs.getObject("last_updated_at", OffsetDateTime.class),
+                rs.getObject("first_seen_at", OffsetDateTime.class)
             );
         }
     }

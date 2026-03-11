@@ -1,4 +1,4 @@
-import type { AssetClass, MarketNarrative, NarrativeDirection, NarrativeStatus } from "../types/marketPulse";
+import type { MarketNarrative, NarrativeDirection, NarrativeStatus } from "../lib/market-pulse/types";
 
 interface NarrativeCardProps {
   narrative: MarketNarrative;
@@ -23,13 +23,6 @@ const statusBadgeStyle: Record<NarrativeStatus, string> = {
   Fading: "text-semantic-neutral bg-bg-elevated border-border-default"
 };
 
-const assetBadgeStyle: Record<AssetClass, string> = {
-  Equity: "text-text-secondary bg-bg-elevated border-border-default",
-  Macro: "text-semantic-info bg-bg-elevated border-border-default",
-  Commodity: "text-semantic-warning bg-bg-elevated border-border-default",
-  Crypto: "text-text-secondary bg-bg-elevated border-border-default"
-};
-
 const signalStrengthStyle = (value: number) => {
   if (value >= 80) return "text-semantic-negative";
   if (value >= 60) return "text-semantic-warning";
@@ -47,8 +40,8 @@ function DirectionIcon({ direction }: { direction: NarrativeDirection }) {
   if (direction === "bullish") {
     return (
       <svg
-        width="18"
-        height="18"
+        width="14"
+        height="14"
         viewBox="0 0 20 20"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
@@ -62,8 +55,8 @@ function DirectionIcon({ direction }: { direction: NarrativeDirection }) {
   if (direction === "bearish") {
     return (
       <svg
-        width="18"
-        height="18"
+        width="14"
+        height="14"
         viewBox="0 0 20 20"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
@@ -76,8 +69,8 @@ function DirectionIcon({ direction }: { direction: NarrativeDirection }) {
   }
   return (
     <svg
-      width="18"
-      height="18"
+      width="14"
+      height="14"
       viewBox="0 0 20 20"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
@@ -91,8 +84,8 @@ function DirectionIcon({ direction }: { direction: NarrativeDirection }) {
 function MetricItem({ label, value, valueClassName }: { label: string; value: string; valueClassName?: string }) {
   return (
     <div className="flex flex-col gap-4">
-      <span className="text-[9px] uppercase tracking-widest text-text-muted/70">{label}</span>
-      <span className={[("font-mono text-xl font-semibold"), valueClassName ?? "text-text-primary"].join(" ")}>
+      <span className="text-[9px] uppercase tracking-widest text-text-muted/60">{label}</span>
+      <span className={["font-mono text-xl font-bold", valueClassName ?? "text-text-primary"].join(" ")}>
         {value}
       </span>
     </div>
@@ -105,46 +98,36 @@ export default function NarrativeCard({ narrative }: NarrativeCardProps) {
     typeof narrative.sourceDelta === "number"
       ? `${narrative.sourceDelta > 0 ? "+" : ""}${narrative.sourceDelta}`
       : null;
+  const toTitleCase = (value: string) =>
+    value
+      .replace(/_/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
+  const taxonomyParts = [narrative.sector, narrative.subtopic]
+    .map((value) => (value ? toTitleCase(value.trim()) : ""))
+    .filter(Boolean);
+  const taxonomyLabel = taxonomyParts.length > 0 ? taxonomyParts.join(" · ") : null;
 
   return (
     <article
       className={[
-        "group flex h-full flex-col gap-16 rounded-md border border-border-default border-l-2 bg-bg-surface p-20",
-        "transition-all hover:border-border-subtle hover:bg-bg-elevated",
-        directionBorder[narrative.direction]
+        "group flex h-full flex-col rounded-md border border-border-default bg-bg-surface p-20",
+        "transition-all hover:border-border-subtle hover:bg-bg-elevated"
       ].join(" ")}
     >
-      <div className="flex items-start justify-between gap-12">
-        <div className="flex min-w-0 items-start gap-8">
-          <div className="mt-2">
-            <DirectionIcon direction={narrative.direction} />
-          </div>
-          <div className="flex min-w-0 flex-col gap-8">
-            <div className="flex min-w-0 items-center gap-8">
-              <span className="truncate text-base font-semibold leading-snug text-text-primary">
-                {narrative.title}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-8">
-              <span
-                className={[
-                  "inline-flex items-center rounded border px-8 py-4 text-xs font-medium capitalize",
-                  statusBadgeStyle[narrative.status]
-                ].join(" ")}
-              >
-                {narrative.status.toLowerCase()}
-              </span>
-              <span
-                className={[
-                  "inline-flex items-center rounded border px-8 py-4 text-xs font-medium capitalize",
-                  assetBadgeStyle[narrative.assetClass]
-                ].join(" ")}
-              >
-                {narrative.assetClass.toLowerCase()}
-              </span>
-            </div>
-          </div>
-        </div>
+      <div className="mb-8 flex items-center gap-8">
+        <DirectionIcon direction={narrative.direction} />
+        {taxonomyLabel && (
+          <span className={["text-xs font-medium", directionStyle[narrative.direction]].join(" ")}>
+            {taxonomyLabel}
+          </span>
+        )}
+      </div>
+
+      <div className="mb-12 flex items-start justify-between gap-12">
+        <h3 className="text-base font-semibold leading-snug text-text-primary">{narrative.displayName}</h3>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -153,15 +136,26 @@ export default function NarrativeCard({ narrative }: NarrativeCardProps) {
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="mt-2 h-4 w-4 shrink-0 text-text-muted/40 transition-colors group-hover:text-semantic-info"
+          className="mt-1 h-4 w-4 shrink-0 text-text-muted/40 transition-colors group-hover:text-semantic-info"
         >
           <path d="m9 18 6-6-6-6" />
         </svg>
       </div>
 
-      <p className="text-xs text-text-secondary leading-relaxed">{narrative.summary}</p>
+      <div className="mb-16">
+        <span
+          className={[
+            "inline-flex items-center rounded border px-8 py-4 text-xs font-medium capitalize",
+            statusBadgeStyle[narrative.status]
+          ].join(" ")}
+        >
+          {narrative.status.toLowerCase()}
+        </span>
+      </div>
 
-      <div className="grid grid-cols-3 gap-12 rounded border border-border-subtle bg-bg-elevated p-12">
+      <p className="mb-16 text-sm text-text-secondary/70 leading-relaxed">{narrative.summary}</p>
+
+      <div className="mb-16 grid grid-cols-3 gap-12 rounded border border-border-subtle bg-bg-elevated p-12">
         <MetricItem
           label="Signal Strength"
           value={`${narrative.signalStrength} / 100`}
@@ -173,24 +167,26 @@ export default function NarrativeCard({ narrative }: NarrativeCardProps) {
           valueClassName={momentumStyle(narrative.momentum)}
         />
         <div className="flex flex-col gap-4">
-          <span className="text-[9px] uppercase tracking-widest text-text-muted/70">Sources</span>
-          <div className="flex items-baseline gap-6">
-            <span className="font-mono text-xl font-semibold text-text-primary">
+          <span className="text-[9px] uppercase tracking-widest text-text-muted/60">Sources</span>
+          <div className="flex items-baseline gap-8">
+            <span className="font-mono text-xl font-bold text-text-primary">
               {narrative.sourceCount}
             </span>
-            {sourceDeltaLabel && <span className="text-[10px] font-mono text-semantic-info">{sourceDeltaLabel}</span>}
+            {sourceDeltaLabel && (
+              <span className="text-[10px] font-mono text-semantic-positive">{sourceDeltaLabel}</span>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-6">
+      <div className="mb-12 flex flex-wrap gap-8">
         {narrative.affectedAssets.map((asset, index) => (
           <button
             key={asset}
             className={[
-              "rounded border px-8 py-4 text-[10px] font-mono font-medium transition",
+              "rounded border px-12 py-6 text-[10px] font-mono font-medium transition",
               index === 0
-                ? "border-border-default bg-bg-elevated text-text-primary"
+                ? "border-semantic-info/40 bg-semantic-info/10 text-semantic-info"
                 : "border-border-subtle bg-bg-surface text-text-muted"
             ].join(" ")}
             type="button"
@@ -200,7 +196,7 @@ export default function NarrativeCard({ narrative }: NarrativeCardProps) {
         ))}
       </div>
 
-      <div className="flex items-center justify-between text-[10px] text-text-muted/70">
+      <div className="flex items-center justify-between text-[10px] text-text-muted/50">
         <span>Last update: {narrative.lastUpdatedLabel}</span>
         <span>Age: {narrative.ageLabel}</span>
       </div>

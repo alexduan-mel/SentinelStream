@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -279,9 +280,10 @@ def _update_asset_links(conn, topic_id: int, analysis: AnalysisInput) -> int:
 def _compute_strength_score(recent_count: int, avg_relevance: float | None) -> float:
     if recent_count <= 0:
         return 0.0
-    normalized_recent = min(1.0, recent_count / 5.0)
+    normalized_recent = min(1.0, math.log1p(recent_count) / math.log(15))
     relevance_component = max(0.0, min(1.0, avg_relevance or 0.0))
-    return min(1.0, round(0.7 * normalized_recent + 0.3 * relevance_component, 4))
+    strength = 0.7 * normalized_recent + 0.3 * relevance_component
+    return min(1.0, strength)
 
 
 def _compute_topic_status(

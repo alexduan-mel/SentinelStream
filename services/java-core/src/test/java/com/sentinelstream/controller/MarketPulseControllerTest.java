@@ -15,6 +15,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.sentinelstream.dto.MarketPulseEvidenceResponse;
+import com.sentinelstream.dto.MarketPulseNarrativeResponse;
 import com.sentinelstream.dto.MarketPulseOverviewCardResponse;
 import com.sentinelstream.dto.MarketPulseOverviewResponse;
 import com.sentinelstream.dto.MarketPulseTopicCardResponse;
@@ -118,5 +119,43 @@ class MarketPulseControllerTest {
             .andExpect(jsonPath("$.topic_key").value("memory_pricing"))
             .andExpect(jsonPath("$.affected_assets[0]").value("MU"))
             .andExpect(jsonPath("$.evidence[0].news_event_id").value(101));
+    }
+
+    @Test
+    void narrativesResponseShape() throws Exception {
+        List<MarketPulseNarrativeResponse> narratives = List.of(
+            new MarketPulseNarrativeResponse(
+                1L,
+                "AI Infrastructure Capex Surge",
+                "Capex demand remains high.",
+                "bullish",
+                "confirmed",
+                "equity",
+                "macro",
+                "geopolitics",
+                94.0,
+                12.0,
+                47,
+                9,
+                List.of("NVDA", "AMD"),
+                OffsetDateTime.parse("2026-03-11T01:00:00Z"),
+                OffsetDateTime.parse("2026-03-10T15:00:00Z")
+            )
+        );
+        when(marketPulseService.listNarratives("7d", "all", "strength")).thenReturn(narratives);
+
+        mockMvc.perform(get("/api/market-pulse/narratives"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].asset_class").value("equity"))
+            .andExpect(jsonPath("$[0].sector").value("macro"))
+            .andExpect(jsonPath("$[0].subtopic").value("geopolitics"))
+            .andExpect(jsonPath("$[0].signal_strength").value(94.0))
+            .andExpect(jsonPath("$[0].affected_assets[0]").value("NVDA"));
+    }
+
+    @Test
+    void narrativesRejectInvalidParams() throws Exception {
+        mockMvc.perform(get("/api/market-pulse/narratives").param("range", "90d"))
+            .andExpect(status().isBadRequest());
     }
 }

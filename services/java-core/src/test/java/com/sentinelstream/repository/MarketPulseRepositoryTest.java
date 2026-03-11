@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
 import com.sentinelstream.dto.MarketPulseOverviewResponse;
+import com.sentinelstream.dto.MarketPulseNarrativeResponse;
 import com.sentinelstream.dto.MarketPulseTopicCardResponse;
 import com.sentinelstream.dto.MarketPulseTopicDetailResponse;
 
@@ -154,6 +155,76 @@ public class MarketPulseRepositoryTest {
             jdbcTemplate.update("DELETE FROM market_pulse_topics WHERE id = ?", topicId);
             jdbcTemplate.update("DELETE FROM news_events WHERE id = ?", event1);
             jdbcTemplate.update("DELETE FROM news_events WHERE id = ?", event2);
+        }
+    }
+
+    @Test
+    void testMarketPulseNarrativesFilteringAndSorting() throws Exception {
+        try (Connection conn = openConnection()) {
+            JdbcTemplate jdbcTemplate = new JdbcTemplate(new SingleConnectionDataSource(conn, true));
+
+            OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+            Long macroTopicId = jdbcTemplate.queryForObject(
+                "INSERT INTO market_pulse_topics (topic_key, display_name, topic_family, sector, subtopic, topic_type, direction, summary, status, evidence_count, first_seen_at, last_seen_at, strength_score, novelty_score) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                Long.class,
+                "macro_geopolitics",
+                "Macro Geopolitics",
+                "macro",
+                "macro",
+                "geopolitics",
+                "macro",
+                "positive",
+                "Macro summary",
+                "active",
+                5,
+                now.minusHours(6),
+                now.minusHours(1),
+                0.9,
+                0.3
+            );
+            Long equityTopicId = jdbcTemplate.queryForObject(
+                "INSERT INTO market_pulse_topics (topic_key, display_name, topic_family, sector, subtopic, topic_type, direction, summary, status, evidence_count, first_seen_at, last_seen_at, strength_score, novelty_score) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                Long.class,
+                "ai_capex",
+                "AI Capex",
+                "information_technology",
+                "information_technology",
+                "ai",
+                "sector",
+                "negative",
+                "Equity summary",
+                "active",
+                3,
+                now.minusDays(9),
+                now.minusDays(8),
+                0.7,
+                0.6
+            );
+
+            jdbcTemplate.update(
+                "INSERT INTO market_pulse_asset_links (topic_id, asset_symbol, asset_type, relation_type, confidence_score) VALUES (?, ?, ?, ?, ?)",
+                macroTopicId,
+                "DXY",
+                "index",
+                "affected",
+                0.8
+            );
+
+            MarketPulseRepository repository = new MarketPulseRepository(jdbcTemplate);
+            List<MarketPulseNarrativeResponse> narratives = repository.fetchNarratives(
+                now.minusDays(7),
+                "macro",
+                "strength"
+            );
+            assertEquals(1, narratives.size());
+            assertEquals("macro", narratives.get(0).assetClass());
+            assertEquals("macro", narratives.get(0).sector());
+            assertEquals("geopolitics", narratives.get(0).subtopic());
+
+            jdbcTemplate.update("DELETE FROM market_pulse_asset_links WHERE topic_id IN (?, ?)", macroTopicId, equityTopicId);
+            jdbcTemplate.update("DELETE FROM market_pulse_topics WHERE id IN (?, ?)", macroTopicId, equityTopicId);
         }
     }
 }
