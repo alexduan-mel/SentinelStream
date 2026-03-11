@@ -55,15 +55,11 @@ def main() -> int:
                 result = aggregate_market_pulse(conn)
             logger.info(
                 "market_aggregation_complete trace_id=%s analyses_scanned=%s skipped_low_relevance=%s "
-                "matched_topics=%s matched_candidates=%s candidates_created=%s candidates_promoted=%s "
-                "mentions_created=%s asset_links_updated=%s",
+                "topics_upserted=%s mentions_created=%s asset_links_updated=%s",
                 trace_id,
                 result.get("analyses_scanned"),
                 result.get("analyses_skipped_low_relevance"),
-                result.get("matched_existing_topics"),
-                result.get("matched_candidates"),
-                result.get("candidates_created"),
-                result.get("candidates_promoted"),
+                result.get("topics_upserted"),
                 result.get("mentions_created"),
                 result.get("asset_links_updated"),
             )

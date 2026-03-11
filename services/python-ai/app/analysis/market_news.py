@@ -47,7 +47,8 @@ def normalize_market_result(result: MarketAnalysisResult) -> dict[str, Any]:
     sentiment = map_direction_to_sentiment(result.direction)
     entities = map_affected_assets_to_entities(result.affected_assets)
     return {
-        "topic_family": result.topic_family.strip().lower(),
+        "sector": result.sector.strip().lower(),
+        "subtopic": result.subtopic.strip().lower(),
         "subtopic_label": result.subtopic_label.strip(),
         "sentiment": sentiment,
         "entities": entities,

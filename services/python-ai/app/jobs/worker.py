@@ -150,6 +150,17 @@ def _mark_failed(
     conn.commit()
 
 
+def _release_job(conn, job_id: int) -> None:
+    sql = (
+        "UPDATE analysis_jobs "
+        "SET status = 'pending', locked_at = NULL, locked_by = NULL, updated_at = NOW() "
+        "WHERE id = %s"
+    )
+    with conn.cursor() as cursor:
+        cursor.execute(sql, (job_id,))
+    conn.commit()
+
+
 def _recover_stuck_jobs(conn, visibility_timeout_seconds: int) -> int:
     sql = (
         "UPDATE analysis_jobs "
@@ -207,8 +218,7 @@ def _process_jobs(
             if limiter is not None:
                 remaining = limiter.consume(1)
                 if remaining < 0:
-                    error_message = "rate_limited"
-                    _mark_failed(conn, job, error_message, True, max_attempts, run_after_column)
+                    _release_job(conn, job.id)
                     logger.warning(
                         "job_rate_limited job_id=%s news_event_id=%s attempts=%s remaining=%s",
                         job.id,

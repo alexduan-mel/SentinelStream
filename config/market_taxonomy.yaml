@@ -1,0 +1,61 @@
+sectors:
+  macro:
+    - geopolitics
+    - central_banks
+    - inflation
+    - growth
+    - regulation
+    - trade
+    - market_volatility
+  information_technology:
+    - ai
+    - semiconductors
+    - software_cloud
+    - hardware
+  communication_services:
+    - internet_platforms
+    - digital_advertising
+    - media_streaming
+    - telecom
+  consumer_discretionary:
+    - autos
+    - retail
+    - ecommerce
+    - travel_leisure
+  consumer_staples:
+    - food_beverage
+    - household_products
+    - staples_pricing
+  energy:
+    - oil
+    - gas
+    - energy_supply
+    - opec_policy
+  financials:
+    - banks
+    - insurance
+    - asset_management
+    - credit
+  healthcare:
+    - pharma
+    - biotech
+    - medical_devices
+    - healthcare_policy
+  industrials:
+    - aerospace_defense
+    - transport_logistics
+    - manufacturing
+    - capital_goods
+  materials:
+    - metals_mining
+    - chemicals
+    - agriculture_inputs
+    - precious_metals
+  real_estate:
+    - reits
+    - commercial_real_estate
+    - housing
+  utilities:
+    - power
+    - water
+    - regulated_utilities

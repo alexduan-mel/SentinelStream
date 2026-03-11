@@ -53,7 +53,7 @@ def _parse_categories(raw: str | None) -> list[str]:
     if raw is None:
         raw = ""
     parts = [item.strip().lower() for item in raw.split(",") if item.strip()]
-    base = ["general", "merger"]
+    base = ["general"]
     if not parts:
         return base
     merged = list(dict.fromkeys(parts + base))
@@ -182,7 +182,7 @@ def main() -> int:
     args = _parse_args()
 
     api_key = _resolve_api_key(logger)
-    categories = _parse_categories(os.getenv("MARKET_NEWS_CATEGORY", "general,merger"))
+    categories = _parse_categories(os.getenv("MARKET_NEWS_CATEGORY", "general"))
     poll_seconds = max(_get_env_int("MARKET_NEWS_POLL_SECONDS", 300), 1)
 
     logger.info(

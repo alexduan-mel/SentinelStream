@@ -20,9 +20,6 @@ public class MarketPulseTopicMentionEntity {
     @Column(name = "topic_id")
     private Long topicId;
 
-    @Column(name = "candidate_id")
-    private Long candidateId;
-
     @Column(name = "news_event_id")
     private Long newsEventId;
 
@@ -31,6 +28,12 @@ public class MarketPulseTopicMentionEntity {
 
     @Column(name = "topic_family")
     private String topicFamily;
+
+    @Column(name = "sector")
+    private String sector;
+
+    @Column(name = "subtopic")
+    private String subtopic;
 
     @Column(name = "subtopic_label")
     private String subtopicLabel;
@@ -65,10 +68,6 @@ public class MarketPulseTopicMentionEntity {
         return topicId;
     }
 
-    public Long getCandidateId() {
-        return candidateId;
-    }
-
     public Long getNewsEventId() {
         return newsEventId;
     }
@@ -79,6 +78,14 @@ public class MarketPulseTopicMentionEntity {
 
     public String getTopicFamily() {
         return topicFamily;
+    }
+
+    public String getSector() {
+        return sector;
+    }
+
+    public String getSubtopic() {
+        return subtopic;
     }
 
     public String getSubtopicLabel() {

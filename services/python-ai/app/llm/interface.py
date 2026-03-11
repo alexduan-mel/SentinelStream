@@ -2,11 +2,89 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Iterable, Protocol
 
+import yaml
 from pydantic import BaseModel, Field, ValidationError, field_validator
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _taxonomy_paths() -> list[Path]:
+    paths: list[Path] = []
+    env_path = os.getenv("MARKET_TAXONOMY_PATH")
+    if env_path:
+        paths.append(Path(env_path))
+    paths.append(Path("/app/config/market_taxonomy.yaml"))
+    paths.append(Path.cwd() / "config" / "market_taxonomy.yaml")
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        candidate = parent / "config" / "market_taxonomy.yaml"
+        paths.append(candidate)
+        if candidate.is_file():
+            break
+    return paths
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle)
+    return payload if isinstance(payload, dict) else {}
+
+
+@lru_cache(maxsize=1)
+def _load_market_taxonomy_raw() -> dict[str, list[str]]:
+    data: dict[str, Any] = {}
+    for path in _taxonomy_paths():
+        if path.is_file():
+            data = _load_yaml(path)
+            break
+    raw = data.get("sectors") if isinstance(data, dict) else None
+    if not isinstance(raw, dict):
+        LOGGER.warning("market_taxonomy_missing_or_invalid")
+        return {}
+    cleaned: dict[str, list[str]] = {}
+    for sector, subtopics in raw.items():
+        if not isinstance(sector, str):
+            continue
+        sector_key = sector.strip().lower()
+        if not sector_key:
+            continue
+        items: list[str] = []
+        if isinstance(subtopics, list):
+            for item in subtopics:
+                if not isinstance(item, str):
+                    continue
+                value = item.strip().lower()
+                if value:
+                    items.append(value)
+        if items:
+            cleaned[sector_key] = items
+    if not cleaned:
+        LOGGER.warning("market_taxonomy_empty")
+    return cleaned
+
+
+@lru_cache(maxsize=1)
+def _load_market_taxonomy_sets() -> dict[str, set[str]]:
+    raw = _load_market_taxonomy_raw()
+    return {sector: set(subtopics) for sector, subtopics in raw.items()}
+
+
+def _format_taxonomy_for_prompt() -> str:
+    raw = _load_market_taxonomy_raw()
+    if not raw:
+        return ""
+    lines = []
+    for sector, subtopics in raw.items():
+        lines.append(f"  {sector}: {', '.join(subtopics)}")
+    return "\n".join(lines)
 
 
 class AnalysisResult(BaseModel):
@@ -62,7 +140,8 @@ class AnalysisResult(BaseModel):
 
 
 class MarketAnalysisResult(BaseModel):
-    topic_family: str
+    sector: str
+    subtopic: str
     subtopic_label: str
     topic_type: str
     direction: str
@@ -75,37 +154,36 @@ class MarketAnalysisResult(BaseModel):
         "strict": True,
     }
 
-    @field_validator("topic_family")
+    @field_validator("sector")
     @classmethod
-    def _validate_topic_family(cls, value: str) -> str:
+    def _validate_sector(cls, value: str) -> str:
         if not isinstance(value, str):
-            raise ValueError("topic_family must be a string")
+            raise ValueError("sector must be a string")
         cleaned = value.strip()
         if not cleaned:
-            raise ValueError("topic_family must be non-empty")
-        allowed = {
-            "geopolitics",
-            "energy",
-            "macro",
-            "rates",
-            "regulation",
-            "ai",
-            "semiconductors",
-            "internet_software",
-            "defense",
-            "aerospace_space",
-            "transport",
-            "commodities",
-            "financials",
-            "healthcare",
-            "consumer",
-            "industrials",
-            "market_structure",
-            "other",
-        }
+            raise ValueError("sector must be non-empty")
         cleaned = cleaned.lower()
-        if cleaned not in allowed:
-            raise ValueError("topic_family must be a supported value")
+        taxonomy = _load_market_taxonomy_sets()
+        if not taxonomy:
+            raise ValueError("sector taxonomy is not configured")
+        if cleaned not in taxonomy:
+            raise ValueError("sector must be a supported value")
+        return cleaned
+
+    @field_validator("subtopic")
+    @classmethod
+    def _validate_subtopic(cls, value: str, info: Any) -> str:
+        if not isinstance(value, str):
+            raise ValueError("subtopic must be a string")
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("subtopic must be non-empty")
+        cleaned = cleaned.lower()
+        sector = info.data.get("sector") if hasattr(info, "data") else None
+        if isinstance(sector, str):
+            allowed = _load_market_taxonomy_sets().get(sector.lower(), set())
+            if cleaned not in allowed:
+                raise ValueError("subtopic must be a supported value for the sector")
         return cleaned
 
     @field_validator("subtopic_label")
@@ -229,14 +307,18 @@ def build_market_prompt(input_text: str) -> str:
     return (
         "You are a market news analyst.\n\n"
         "Analyze the market news article and output ONLY valid JSON with exactly these keys:\n"
-        "topic_family, subtopic_label, topic_type, direction, summary, affected_assets, market_relevance_score\n\n"
+        "sector, subtopic, subtopic_label, topic_type, direction, summary, affected_assets, market_relevance_score\n\n"
         "Rules:\n"
-        "- topic_family must be exactly one of:\n"
-        "  geopolitics, energy, macro, rates, regulation, ai, semiconductors, internet_software, defense, aerospace_space, transport, commodities, financials, healthcare, consumer, industrials, market_structure, other\n"
-        "- subtopic_label must be a short reusable news-level narrative phrase\n"
+        "- sector must be exactly one of the configured sectors\n"
+        "- subtopic must be one of the allowed values for the chosen sector:\n"
+        f"{_format_taxonomy_for_prompt()}\n"
+        "- subtopic_label must be a short human-readable noun phrase\n"
+        "- subtopic_label should be 2 to 6 words when possible\n"
+        "- subtopic_label must not be a sentence\n"
+        "- subtopic_label must not be a clause\n"
         "- subtopic_label must not be a full headline\n"
-        "- subtopic_label must not be a final canonical market topic\n"
-        "- do not generate final canonical market topics\n"
+        "- subtopic_label should not use article-style phrasing such as: impacts, driven by, due to, discussed, concerns over, raises tensions\n"
+        "- examples of good subtopic_label: iran conflict; oil price surge; airline cost pressure; bank funding stress; hyperscaler capex expansion; launch demand growth\n"
         "- focus on market impact rather than article wording\n"
         "- classify by the main market narrative, not strictly by company name\n"
         "- topic_type should be a compact label such as equity, macro, commodity, policy, geopolitics, sector, other\n"
@@ -269,7 +351,7 @@ def build_retry_prompt(input_text: str) -> str:
 
 def build_market_retry_prompt(input_text: str) -> str:
     template = (
-        '{"topic_family":"semiconductors","subtopic_label":"memory pricing",'
+        '{"sector":"information_technology","subtopic":"semiconductors","subtopic_label":"memory pricing",'
         '"topic_type":"sector","direction":"neutral","summary":"Brief summary.",'
         '"affected_assets":[{"symbol":"MU","confidence":0.7}],"market_relevance_score":0.5}'
     )

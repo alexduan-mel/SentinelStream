@@ -9,14 +9,29 @@ from analysis.market_news import (
 from llm.interface import MarketAnalysisResult
 
 
-def test_topic_family_validation():
+def test_sector_validation():
     with pytest.raises(ValidationError):
         MarketAnalysisResult(
-            topic_family="unknown",
+            sector="unknown",
+            subtopic="geopolitics",
             subtopic_label="Random",
             topic_type="misc",
             direction="neutral",
             summary="Regional tensions.",
+            affected_assets=[],
+            market_relevance_score=0.6,
+        )
+
+
+def test_subtopic_validation_for_sector():
+    with pytest.raises(ValidationError):
+        MarketAnalysisResult(
+            sector="energy",
+            subtopic="ai",
+            subtopic_label="AI demand",
+            topic_type="sector",
+            direction="neutral",
+            summary="Energy markets mentioned AI demand.",
             affected_assets=[],
             market_relevance_score=0.6,
         )
@@ -48,7 +63,8 @@ def test_affected_assets_mapping():
 
 def test_normalize_market_result_output():
     result = MarketAnalysisResult(
-        topic_family="semiconductors",
+        sector="information_technology",
+        subtopic="semiconductors",
         subtopic_label="Memory pricing",
         topic_type="sector",
         direction="neutral",
@@ -57,7 +73,8 @@ def test_normalize_market_result_output():
         market_relevance_score=0.4,
     )
     normalized = normalize_market_result(result)
-    assert normalized["topic_family"] == "semiconductors"
+    assert normalized["sector"] == "information_technology"
+    assert normalized["subtopic"] == "semiconductors"
     assert normalized["subtopic_label"] == "Memory pricing"
     assert normalized["sentiment"] == "neutral"
     assert normalized["entities"] == [{"symbol": "MU", "confidence": 0.5}]

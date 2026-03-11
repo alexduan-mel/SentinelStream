@@ -14,13 +14,15 @@ class FakeProvider:
 
 def test_market_parse_valid_json():
     output = (
-        '{"topic_family":"semiconductors","subtopic_label":"Memory pricing","topic_type":"sector",'
+        '{"sector":"information_technology","subtopic":"semiconductors","subtopic_label":"Memory pricing","topic_type":"sector",'
         '"direction":"neutral","summary":"Chip prices stabilized.",'
         '"affected_assets":[{"symbol":"MU","confidence":0.9}],"market_relevance_score":0.7}'
     )
     client = LLMClient(FakeProvider([output]), timeout_seconds=5, max_retries=0)
     result = client.analyze_market_news("Title: Example")
     assert isinstance(result, MarketAnalysisResult)
+    assert result.sector == "information_technology"
+    assert result.subtopic == "semiconductors"
     assert result.subtopic_label == "Memory pricing"
     assert result.market_relevance_score == 0.7
 
@@ -28,7 +30,7 @@ def test_market_parse_valid_json():
 def test_market_retry_on_invalid_json_then_success():
     bad = "not-json"
     good = (
-        '{"topic_family":"macro","subtopic_label":"Fed policy shift","topic_type":"macro",'
+        '{"sector":"macro","subtopic":"central_banks","subtopic_label":"Fed policy shift","topic_type":"macro",'
         '"direction":"bullish","summary":"Policy easing talk.",'
         '"affected_assets":[],"market_relevance_score":0.6}'
     )

@@ -26,6 +26,12 @@ public class MarketPulseTopicEntity {
     @Column(name = "topic_family", nullable = false)
     private String topicFamily;
 
+    @Column(name = "sector")
+    private String sector;
+
+    @Column(name = "subtopic")
+    private String subtopic;
+
     @Column(name = "topic_type")
     private String topicType;
 
@@ -59,9 +65,6 @@ public class MarketPulseTopicEntity {
     @Column(name = "last_clustered_at")
     private OffsetDateTime lastClusteredAt;
 
-    @Column(name = "source_candidate_id")
-    private Long sourceCandidateId;
-
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 
@@ -89,6 +92,14 @@ public class MarketPulseTopicEntity {
 
     public String getTopicFamily() {
         return topicFamily;
+    }
+
+    public String getSector() {
+        return sector;
+    }
+
+    public String getSubtopic() {
+        return subtopic;
     }
 
     public String getTopicType() {
@@ -133,10 +144,6 @@ public class MarketPulseTopicEntity {
 
     public OffsetDateTime getLastClusteredAt() {
         return lastClusteredAt;
-    }
-
-    public Long getSourceCandidateId() {
-        return sourceCandidateId;
     }
 
     public OffsetDateTime getCreatedAt() {

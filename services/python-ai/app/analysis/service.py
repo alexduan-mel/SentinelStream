@@ -388,7 +388,8 @@ def analyze_market_news_event(news_event_id: int, analysis_job_id: int | None = 
             )
             normalized = normalize_market_result(result)
             normalized_payload = {
-                "topic_family": normalized["topic_family"],
+                "sector": normalized["sector"],
+                "subtopic": normalized["subtopic"],
                 "subtopic_label": normalized["subtopic_label"],
                 "topic_type": result.topic_type,
                 "direction": result.direction,

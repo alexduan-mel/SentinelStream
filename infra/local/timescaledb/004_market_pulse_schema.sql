@@ -1,4 +1,6 @@
--- MarketPulse V2 schema (candidates + topics + mentions + asset links)
+-- MarketPulse V2 schema (topics + mentions + asset links)
+
+DROP TABLE IF EXISTS market_pulse_candidates CASCADE;
 
 CREATE TABLE IF NOT EXISTS market_pulse_topics (
   id                BIGSERIAL PRIMARY KEY,
@@ -6,6 +8,8 @@ CREATE TABLE IF NOT EXISTS market_pulse_topics (
   topic_key         TEXT NOT NULL,
   display_name      TEXT NOT NULL,
   topic_family      TEXT NOT NULL DEFAULT 'other',
+  sector            TEXT,
+  subtopic          TEXT,
   topic_type        TEXT,
   summary           TEXT,
   direction         TEXT,
@@ -17,26 +21,6 @@ CREATE TABLE IF NOT EXISTS market_pulse_topics (
   first_seen_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_seen_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_clustered_at TIMESTAMPTZ,
-  source_candidate_id BIGINT NULL,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS market_pulse_candidates (
-  id                BIGSERIAL PRIMARY KEY,
-  candidate_uuid    UUID NOT NULL DEFAULT gen_random_uuid(),
-  topic_family      TEXT NOT NULL DEFAULT 'other',
-  candidate_key     TEXT NOT NULL,
-  candidate_label   TEXT NOT NULL,
-  representative_subtopic TEXT,
-  summary           TEXT,
-  status            TEXT NOT NULL DEFAULT 'candidate',
-  evidence_count    INTEGER NOT NULL DEFAULT 0,
-  avg_relevance_score DOUBLE PRECISION,
-  centroid_embedding JSONB,
-  first_seen_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  last_seen_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  promoted_topic_id BIGINT NULL,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -44,11 +28,12 @@ CREATE TABLE IF NOT EXISTS market_pulse_candidates (
 CREATE TABLE IF NOT EXISTS market_pulse_topic_mentions (
   id                BIGSERIAL PRIMARY KEY,
   mention_uuid      UUID NOT NULL DEFAULT gen_random_uuid(),
-  topic_id          BIGINT NULL REFERENCES market_pulse_topics(id) ON DELETE CASCADE,
-  candidate_id      BIGINT NULL REFERENCES market_pulse_candidates(id) ON DELETE CASCADE,
+  topic_id          BIGINT NOT NULL REFERENCES market_pulse_topics(id) ON DELETE CASCADE,
   news_event_id     BIGINT NOT NULL REFERENCES news_events(id) ON DELETE CASCADE,
   llm_analysis_id   BIGINT NULL REFERENCES llm_analyses(id) ON DELETE CASCADE,
   topic_family      TEXT NOT NULL,
+  sector            TEXT,
+  subtopic          TEXT,
   subtopic_label    TEXT,
   reasoning_summary TEXT,
   relevance_score   DOUBLE PRECISION,
@@ -96,6 +81,27 @@ BEGIN
 
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'market_pulse_topics' AND column_name = 'sector'
+    ) THEN
+      ALTER TABLE market_pulse_topics ADD COLUMN sector TEXT;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'market_pulse_topics' AND column_name = 'subtopic'
+    ) THEN
+      ALTER TABLE market_pulse_topics ADD COLUMN subtopic TEXT;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'market_pulse_topics' AND column_name = 'source_candidate_id'
+    ) THEN
+      ALTER TABLE market_pulse_topics DROP COLUMN source_candidate_id;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
       WHERE table_name = 'market_pulse_topics' AND column_name = 'strength_score'
     ) THEN
       ALTER TABLE market_pulse_topics ADD COLUMN strength_score DOUBLE PRECISION;
@@ -112,13 +118,6 @@ BEGIN
     ) THEN
       ALTER TABLE market_pulse_topics ADD COLUMN last_clustered_at TIMESTAMPTZ;
     END IF;
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'market_pulse_topics' AND column_name = 'source_candidate_id'
-    ) THEN
-      ALTER TABLE market_pulse_topics ADD COLUMN source_candidate_id BIGINT;
-    END IF;
-
     UPDATE market_pulse_topics SET display_name = topic_key WHERE display_name IS NULL;
     ALTER TABLE market_pulse_topics ALTER COLUMN display_name SET NOT NULL;
   END IF;
@@ -133,11 +132,11 @@ BEGIN
       ALTER TABLE market_pulse_topic_mentions ADD COLUMN mention_uuid UUID DEFAULT gen_random_uuid();
       ALTER TABLE market_pulse_topic_mentions ALTER COLUMN mention_uuid SET NOT NULL;
     END IF;
-    IF NOT EXISTS (
+    IF EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_name = 'market_pulse_topic_mentions' AND column_name = 'candidate_id'
     ) THEN
-      ALTER TABLE market_pulse_topic_mentions ADD COLUMN candidate_id BIGINT;
+      ALTER TABLE market_pulse_topic_mentions DROP COLUMN candidate_id;
     END IF;
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.columns
@@ -155,10 +154,23 @@ BEGIN
     ALTER TABLE market_pulse_topic_mentions ALTER COLUMN topic_family SET NOT NULL;
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'market_pulse_topic_mentions' AND column_name = 'sector'
+    ) THEN
+      ALTER TABLE market_pulse_topic_mentions ADD COLUMN sector TEXT;
+    END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'market_pulse_topic_mentions' AND column_name = 'subtopic'
+    ) THEN
+      ALTER TABLE market_pulse_topic_mentions ADD COLUMN subtopic TEXT;
+    END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
       WHERE table_name = 'market_pulse_topic_mentions' AND column_name = 'subtopic_label'
     ) THEN
       ALTER TABLE market_pulse_topic_mentions ADD COLUMN subtopic_label TEXT;
     END IF;
+
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_name = 'market_pulse_topic_mentions' AND column_name = 'similarity_score'
@@ -281,25 +293,6 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'chk_market_pulse_candidates_status'
-  ) THEN
-    UPDATE market_pulse_candidates
-      SET status = 'candidate'
-      WHERE status IS NULL;
-    ALTER TABLE market_pulse_candidates
-      ADD CONSTRAINT chk_market_pulse_candidates_status
-      CHECK (status IN ('candidate','promoted','rejected','archived'));
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'chk_market_pulse_candidates_avg_relevance'
-  ) THEN
-    ALTER TABLE market_pulse_candidates
-      ADD CONSTRAINT chk_market_pulse_candidates_avg_relevance
-      CHECK (avg_relevance_score IS NULL OR (avg_relevance_score >= 0 AND avg_relevance_score <= 1));
-  END IF;
-
-  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'chk_market_pulse_topic_mentions_relevance'
   ) THEN
     ALTER TABLE market_pulse_topic_mentions
@@ -320,7 +313,7 @@ BEGIN
   ) THEN
     ALTER TABLE market_pulse_topic_mentions
       ADD CONSTRAINT chk_market_pulse_topic_mentions_subject
-      CHECK (topic_id IS NOT NULL OR candidate_id IS NOT NULL);
+      CHECK (topic_id IS NOT NULL);
   END IF;
 
   IF NOT EXISTS (
@@ -329,13 +322,6 @@ BEGIN
     ALTER TABLE market_pulse_asset_links
       ADD CONSTRAINT chk_market_pulse_asset_links_confidence
       CHECK (confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1));
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'uq_market_pulse_candidates_candidate_key'
-  ) THEN
-    ALTER TABLE market_pulse_candidates
-      ADD CONSTRAINT uq_market_pulse_candidates_candidate_key UNIQUE (candidate_key);
   END IF;
 
   IF NOT EXISTS (
@@ -354,17 +340,6 @@ CREATE INDEX IF NOT EXISTS idx_market_pulse_topics_status
   ON market_pulse_topics (status);
 CREATE INDEX IF NOT EXISTS idx_market_pulse_topics_last_seen_at
   ON market_pulse_topics (last_seen_at);
-CREATE INDEX IF NOT EXISTS idx_market_pulse_topics_source_candidate_id
-  ON market_pulse_topics (source_candidate_id);
-
-CREATE INDEX IF NOT EXISTS idx_market_pulse_candidates_topic_family
-  ON market_pulse_candidates (topic_family);
-CREATE INDEX IF NOT EXISTS idx_market_pulse_candidates_status
-  ON market_pulse_candidates (status);
-CREATE INDEX IF NOT EXISTS idx_market_pulse_candidates_last_seen_at
-  ON market_pulse_candidates (last_seen_at);
-CREATE INDEX IF NOT EXISTS idx_market_pulse_candidates_promoted_topic_id
-  ON market_pulse_candidates (promoted_topic_id);
 
 CREATE INDEX IF NOT EXISTS idx_market_pulse_topic_mentions_news_event_id
   ON market_pulse_topic_mentions (news_event_id);
@@ -378,30 +353,8 @@ CREATE INDEX IF NOT EXISTS idx_market_pulse_topic_mentions_assigned_at
 CREATE UNIQUE INDEX IF NOT EXISTS uq_market_pulse_topic_mentions_topic_event
   ON market_pulse_topic_mentions (topic_id, news_event_id)
   WHERE topic_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_market_pulse_topic_mentions_candidate_event
-  ON market_pulse_topic_mentions (candidate_id, news_event_id)
-  WHERE candidate_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_market_pulse_asset_links_asset_symbol
   ON market_pulse_asset_links (asset_symbol);
 CREATE INDEX IF NOT EXISTS idx_market_pulse_asset_links_last_seen_at
   ON market_pulse_asset_links (last_seen_at);
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'fk_market_pulse_topics_source_candidate'
-  ) THEN
-    ALTER TABLE market_pulse_topics
-      ADD CONSTRAINT fk_market_pulse_topics_source_candidate
-      FOREIGN KEY (source_candidate_id) REFERENCES market_pulse_candidates(id) ON DELETE SET NULL;
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'fk_market_pulse_candidates_promoted_topic'
-  ) THEN
-    ALTER TABLE market_pulse_candidates
-      ADD CONSTRAINT fk_market_pulse_candidates_promoted_topic
-      FOREIGN KEY (promoted_topic_id) REFERENCES market_pulse_topics(id) ON DELETE SET NULL;
-  END IF;
-END $$;
