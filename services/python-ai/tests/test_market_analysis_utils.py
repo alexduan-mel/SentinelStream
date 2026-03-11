@@ -6,7 +6,7 @@ from analysis.market_news import (
     map_direction_to_sentiment,
     normalize_market_result,
 )
-from llm.interface import MarketAnalysisResult
+from llm.interface import MarketAnalysisResult, _load_market_taxonomy_sets
 
 
 def test_sector_validation():
@@ -37,6 +37,24 @@ def test_subtopic_validation_for_sector():
         )
 
 
+def test_other_subtopic_supported_for_all_sectors():
+    taxonomy = _load_market_taxonomy_sets()
+    assert taxonomy
+    for sector, subtopics in taxonomy.items():
+        assert "other" in subtopics
+        result = MarketAnalysisResult(
+            sector=sector,
+            subtopic="other",
+            subtopic_label="Misc update",
+            topic_type="sector",
+            direction="neutral",
+            summary="General market update.",
+            affected_assets=[],
+            market_relevance_score=0.5,
+        )
+        assert result.subtopic == "other"
+
+
 def test_direction_mapping():
     assert map_direction_to_sentiment("bullish") == "positive"
     assert map_direction_to_sentiment("bearish") == "negative"
@@ -46,11 +64,11 @@ def test_direction_mapping():
 
 def test_affected_assets_mapping():
     assets = [
-        {"symbol": "mu", "confidence": 0.9},
-        "AAPL",
-        {"ticker": "msft", "confidence": 0.7},
-        {"symbol": "AAPL", "confidence": 0.6},
-        {"symbol": "", "confidence": 0.2},
+        {"symbol": "mu", "asset_type": "equity", "relation": "positive", "confidence": 0.9},
+        {"symbol": "AAPL", "asset_type": "equity", "relation": "mixed", "confidence": 0.5},
+        {"ticker": "msft", "asset_type": "equity", "relation": "positive", "confidence": 0.7},
+        {"symbol": "AAPL", "asset_type": "equity", "relation": "negative", "confidence": 0.6},
+        {"symbol": "", "asset_type": "equity", "relation": "mixed", "confidence": 0.2},
     ]
     entities = map_affected_assets_to_entities(assets)
     entities_sorted = sorted(entities, key=lambda item: item["symbol"])
@@ -69,7 +87,7 @@ def test_normalize_market_result_output():
         topic_type="sector",
         direction="neutral",
         summary="Prices stabilized.",
-        affected_assets=["MU"],
+        affected_assets=[{"symbol": "MU", "asset_type": "equity", "relation": "positive", "confidence": 0.8}],
         market_relevance_score=0.4,
     )
     normalized = normalize_market_result(result)

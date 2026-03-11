@@ -305,29 +305,31 @@ def build_market_prompt(input_text: str) -> str:
             content = line.replace("Content:", "", 1).strip()
 
     return (
-        "You are a market news analyst.\n\n"
-        "Analyze the market news article and output ONLY valid JSON with exactly these keys:\n"
+        "You are a market news analyst. Output ONLY valid JSON with keys:\n"
         "sector, subtopic, subtopic_label, topic_type, direction, summary, affected_assets, market_relevance_score\n\n"
-        "Rules:\n"
-        "- sector must be exactly one of the configured sectors\n"
-        "- subtopic must be one of the allowed values for the chosen sector:\n"
+        "Classification:\n"
+        "- sector must be one of the configured sectors\n"
+        "- subtopic must be allowed for the chosen sector:\n"
         f"{_format_taxonomy_for_prompt()}\n"
-        "- subtopic_label must be a short human-readable noun phrase\n"
-        "- subtopic_label should be 2 to 6 words when possible\n"
-        "- subtopic_label must not be a sentence\n"
-        "- subtopic_label must not be a clause\n"
-        "- subtopic_label must not be a full headline\n"
-        "- subtopic_label should not use article-style phrasing such as: impacts, driven by, due to, discussed, concerns over, raises tensions\n"
-        "- examples of good subtopic_label: iran conflict; oil price surge; airline cost pressure; bank funding stress; hyperscaler capex expansion; launch demand growth\n"
-        "- focus on market impact rather than article wording\n"
-        "- classify by the main market narrative, not strictly by company name\n"
-        "- topic_type should be a compact label such as equity, macro, commodity, policy, geopolitics, sector, other\n"
-        "- direction must be exactly one of: bullish, bearish, neutral, mixed\n"
-        "- market_relevance_score must be between 0 and 1\n"
-        "- affected_assets should be a list of symbols or objects like {\"symbol\":\"MU\",\"confidence\":0.9}\n"
-        "- return JSON only\n"
-        "- no markdown\n"
-        "- no extra text\n\n"
+        "- use `other` only if no listed subtopic fits\n"
+        "- if conflict itself -> macro/geopolitics; sector-impact focus -> that sector\n\n"
+        "subtopic_label:\n"
+        "- 2-6 word noun phrase\n"
+        "- not a sentence/headline\n"
+        "- describe the core market narrative\n\n"
+        "topic_type: equity | macro | commodity | policy | geopolitics | sector | other\n"
+        "direction: bullish | bearish | neutral | mixed\n"
+        "market_relevance_score: 0-1\n\n"
+        "affected_assets:\n"
+        "- only directly impacted assets, max 5\n"
+        "- prefer commodities/ETFs/indexes for macro news\n"
+        "- avoid speculative/weak links\n"
+        "- must be objects: {symbol, asset_type, relation, confidence}\n"
+        "- asset_type: equity | etf | commodity | index | fx | other\n"
+        "- relation: positive | negative | mixed\n"
+        "- confidence: 0-1\n"
+        "- no plain ticker strings\n\n"
+        "Return JSON only. No markdown.\n\n"
         "NEWS:\n"
         f"Title: {title}\n"
         f"URL: {url}\n"
@@ -353,7 +355,8 @@ def build_market_retry_prompt(input_text: str) -> str:
     template = (
         '{"sector":"information_technology","subtopic":"semiconductors","subtopic_label":"memory pricing",'
         '"topic_type":"sector","direction":"neutral","summary":"Brief summary.",'
-        '"affected_assets":[{"symbol":"MU","confidence":0.7}],"market_relevance_score":0.5}'
+        '"affected_assets":[{"symbol":"MU","asset_type":"equity","relation":"positive","confidence":0.7}],'
+        '"market_relevance_score":0.5}'
     )
     return (
         "STRICT MODE: Output ONLY JSON matching this exact schema. "

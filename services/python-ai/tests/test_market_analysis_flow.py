@@ -166,7 +166,10 @@ def test_market_analysis_flow(monkeypatch):
     output = (
         '{"main_topic":"Memory pricing","topic_key":"dram_pricing","topic_type":"sector",'
         '"direction":"mixed","summary":"Chip prices stabilized.",'
-        '"affected_assets":[{"symbol":"MU","confidence":0.9},"WDC"],'
+        '"affected_assets":['
+        '{"symbol":"MU","asset_type":"equity","relation":"positive","confidence":0.9},'
+        '{"symbol":"WDC","asset_type":"equity","relation":"mixed","confidence":0.5}'
+        '],'
         '"market_relevance_score":0.72}'
     )
     provider = FakeProvider([output])

@@ -185,6 +185,9 @@ BEGIN
       UPDATE market_pulse_topic_mentions SET assigned_at = COALESCE(assigned_at, created_at, NOW());
       ALTER TABLE market_pulse_topic_mentions ALTER COLUMN assigned_at SET NOT NULL;
     END IF;
+
+    DELETE FROM market_pulse_topic_mentions WHERE topic_id IS NULL;
+    ALTER TABLE market_pulse_topic_mentions ALTER COLUMN topic_id SET NOT NULL;
   END IF;
 
   IF EXISTS (

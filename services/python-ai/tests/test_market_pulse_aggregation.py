@@ -140,6 +140,7 @@ def test_low_relevance_skipped():
 
 def test_topic_key_generation():
     assert build_topic_key("macro", "geopolitics") == "macro__geopolitics"
+    assert build_topic_key("energy", "other") == "energy__other"
 
 
 def test_conflict_news_maps_to_macro_geopolitics():
@@ -188,6 +189,29 @@ def test_oil_conflict_maps_to_energy_oil():
         _cleanup(conn, [event_id])
 
 
+def test_uncategorized_news_maps_to_sector_other():
+    now = datetime.now(timezone.utc)
+    with _db_conn() as conn:
+        event_id = _insert_news_event(conn, now - timedelta(hours=1))
+        _insert_analysis(
+            conn,
+            event_id,
+            _payload("utilities", "other", "Regulatory update", "Regulatory change impact", 0.6),
+            0.6,
+        )
+
+        aggregate_market_pulse(conn, now=now)
+
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM market_pulse_topics WHERE topic_key = %s",
+                ("utilities__other",),
+            )
+            assert cursor.fetchone() is not None
+
+        _cleanup(conn, [event_id])
+
+
 def test_direct_topic_upsert_and_mentions():
     now = datetime.now(timezone.utc)
     with _db_conn() as conn:
@@ -223,7 +247,7 @@ def test_direct_topic_upsert_and_mentions():
 
 def test_idempotent_mentions_and_assets():
     now = datetime.now(timezone.utc)
-    assets = [{"symbol": "MU", "confidence": 0.9}]
+    assets = [{"symbol": "MU", "asset_type": "equity", "relation": "positive", "confidence": 0.9}]
 
     with _db_conn() as conn:
         event1 = _insert_news_event(conn, now - timedelta(hours=2))

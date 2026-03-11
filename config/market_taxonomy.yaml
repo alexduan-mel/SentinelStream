@@ -7,55 +7,67 @@ sectors:
     - regulation
     - trade
     - market_volatility
+    - other
   information_technology:
     - ai
     - semiconductors
     - software_cloud
     - hardware
+    - other
   communication_services:
     - internet_platforms
     - digital_advertising
     - media_streaming
     - telecom
+    - other
   consumer_discretionary:
     - autos
     - retail
     - ecommerce
     - travel_leisure
+    - other
   consumer_staples:
     - food_beverage
     - household_products
     - staples_pricing
+    - other
   energy:
     - oil
     - gas
     - energy_supply
     - opec_policy
+    - other
   financials:
     - banks
     - insurance
     - asset_management
     - credit
+    - other
   healthcare:
     - pharma
     - biotech
     - medical_devices
     - healthcare_policy
+    - other
   industrials:
     - aerospace_defense
     - transport_logistics
     - manufacturing
     - capital_goods
+    - other
   materials:
     - metals_mining
     - chemicals
     - agriculture_inputs
     - precious_metals
+    - other
   real_estate:
     - reits
     - commercial_real_estate
     - housing
+    - other
   utilities:
     - power
     - water
     - regulated_utilities
+    - other
