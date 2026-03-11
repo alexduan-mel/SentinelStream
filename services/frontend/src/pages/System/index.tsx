@@ -40,7 +40,7 @@ export default function SystemPage() {
             {operations.map((operation) => (
               <div
                 key={operation.title}
-                className="rounded-md border border-border-subtle bg-bg-elevated p-16"
+                className="rounded border border-border-subtle bg-bg-elevated p-16"
               >
                 <div className="flex items-start justify-between">
                   <div>
@@ -66,7 +66,7 @@ export default function SystemPage() {
               <div>Fetched</div>
               <div>Inserted</div>
             </div>
-            <div className="mt-12 rounded-md border border-border-subtle bg-bg-elevated p-16 text-caption text-text-muted">
+            <div className="mt-12 rounded border border-border-subtle bg-bg-elevated p-16 text-caption text-text-muted">
               Table placeholder
             </div>
           </div>

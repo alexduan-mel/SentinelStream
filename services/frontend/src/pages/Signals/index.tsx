@@ -22,7 +22,7 @@ export default function SignalsPage() {
         {filters.map((label) => (
           <button
             key={label}
-            className="rounded-pill border border-border-default bg-bg-surface px-12 py-8 text-label text-text-secondary hover:bg-state-hover"
+            className="rounded border border-border-default bg-bg-surface px-12 py-8 text-label text-text-secondary hover:bg-state-hover"
           >
             {label}
           </button>
@@ -40,7 +40,7 @@ export default function SignalsPage() {
           <div>Confidence</div>
           <div>Timestamp</div>
         </div>
-        <div className="mt-12 rounded-md border border-border-subtle bg-bg-elevated p-16 text-caption text-text-muted">
+        <div className="mt-12 rounded border border-border-subtle bg-bg-elevated p-16 text-caption text-text-muted">
           No rows to display
         </div>
       </Card>

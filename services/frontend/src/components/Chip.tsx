@@ -21,7 +21,7 @@ export default function Chip({ children, tone = "default", className = "" }: Chi
   return (
     <span
       className={[
-        "inline-flex w-fit items-center gap-4 rounded-sm border border-border-default bg-bg-elevated px-8 py-4 text-label",
+        "inline-flex w-fit items-center gap-4 rounded border border-border-default bg-bg-elevated px-8 py-4 text-label",
         toneStyles[tone],
         className
       ].join(" ")}

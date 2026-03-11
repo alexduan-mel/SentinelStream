@@ -54,6 +54,7 @@ const config: Config = {
       "64": "64px"
     },
     borderRadius: {
+      DEFAULT: `${tokens.radii.sm}px`,
       sm: `${tokens.radii.sm}px`,
       md: `${tokens.radii.md}px`,
       lg: `${tokens.radii.lg}px`,

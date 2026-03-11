@@ -25,7 +25,7 @@ export default function EvidenceList({ items }: EvidenceListProps) {
     <section className="rounded-md border border-border-default bg-bg-surface p-24">
       <h3 className="text-h3">Evidence</h3>
       {items.length === 0 ? (
-        <div className="mt-16 rounded-md border border-border-subtle bg-bg-elevated p-16 text-caption text-text-muted">
+        <div className="mt-16 rounded border border-border-subtle bg-bg-elevated p-16 text-caption text-text-muted">
           No evidence available
         </div>
       ) : (
@@ -37,7 +37,7 @@ export default function EvidenceList({ items }: EvidenceListProps) {
               ? getSentimentMeta(primaryAnalysis.sentiment)
               : getSentimentMeta("neutral");
             return (
-              <div key={item.id} className="flex flex-col gap-12 rounded-md bg-bg-elevated p-20">
+              <div key={item.id} className="flex flex-col gap-12 rounded bg-bg-elevated p-20">
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-16 text-left"
@@ -59,7 +59,7 @@ export default function EvidenceList({ items }: EvidenceListProps) {
                   </div>
                 </button>
                 {isExpanded && (
-                  <div className="rounded-md border border-border-subtle bg-bg-surface">
+                  <div className="rounded border border-border-subtle bg-bg-surface">
                     <div className="px-16 pt-12 text-caption font-semibold uppercase tracking-tight text-text-muted">
                       LLM Analyses
                     </div>

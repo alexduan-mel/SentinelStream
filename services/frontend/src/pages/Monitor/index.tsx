@@ -51,7 +51,7 @@ export default function MonitorPage() {
           {"All Sources,All Types,All Assets".split(",").map((label) => (
             <button
               key={label}
-              className="rounded-pill border border-border-default bg-bg-surface px-12 py-8 text-label text-text-secondary hover:bg-state-hover"
+              className="rounded border border-border-default bg-bg-surface px-12 py-8 text-label text-text-secondary hover:bg-state-hover"
             >
               {label}
             </button>
@@ -66,7 +66,7 @@ export default function MonitorPage() {
               <h2 className="text-xl font-semibold text-text-primary">Verified Signals</h2>
               <p className="text-sm text-text-secondary font-normal">2 verified · {signals.length} total</p>
             </div>
-            <button className="rounded-md border border-border-default bg-bg-surface px-12 py-8 text-label text-text-secondary hover:bg-state-hover">
+            <button className="rounded border border-border-default bg-bg-surface px-12 py-8 text-label text-text-secondary hover:bg-state-hover">
               Newest
             </button>
           </div>
@@ -83,7 +83,7 @@ export default function MonitorPage() {
           <Card title="Market Pulse" action={<Chip tone="neutral">Newest</Chip>}>
             <div className="flex flex-col gap-12">
               {topics.map((item) => (
-                <div key={item.id} className="rounded-md border border-border-subtle bg-bg-elevated p-16">
+                <div key={item.id} className="rounded border border-border-subtle bg-bg-elevated p-16">
                   <div className="flex items-start justify-between">
                     <div className="flex flex-col gap-8">
                       <div className="text-body text-text-primary">{item.name}</div>
