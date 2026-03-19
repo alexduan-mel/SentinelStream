@@ -24,8 +24,7 @@ docker compose run --rm python-ai \
   python -m workers.company_news_worker --replay-only --process-limit 200
 
 # Market news (one-shot)
-docker compose run --rm python-ai \
-  python -m workers.market_news_worker --once
+docker compose run --rm python-ai python -m workers.market_news_worker --once
 ```
 
 ### Run locally (outside Docker)
