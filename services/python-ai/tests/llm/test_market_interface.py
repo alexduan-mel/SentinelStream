@@ -66,11 +66,35 @@ def test_market_parse_accepts_other_subtopic():
     assert result.subtopic == "other"
 
 
+def test_market_parse_maps_fx_sector_to_macro():
+    output = (
+        '{"sector":"fx","subtopic":"trade","subtopic_label":"waterway risk","topic_type":"macro",'
+        '"direction":"neutral","summary":"FX moved on risk shift.",'
+        '"affected_assets":[],"market_relevance_score":0.6}'
+    )
+    client = LLMClient(FakeProvider([output]), timeout_seconds=5, max_retries=0)
+    result = client.analyze_market_news("Title: Example")
+    assert result.sector == "macro"
+    assert result.subtopic == "trade"
+
+
+def test_market_parse_maps_other_sector_to_macro_with_other_subtopic():
+    output = (
+        '{"sector":"other","subtopic":"other","subtopic_label":"broad market update","topic_type":"other",'
+        '"direction":"neutral","summary":"Broad market commentary.",'
+        '"affected_assets":[],"market_relevance_score":0.3}'
+    )
+    client = LLMClient(FakeProvider([output]), timeout_seconds=5, max_retries=0)
+    result = client.analyze_market_news("Title: Example")
+    assert result.sector == "macro"
+    assert result.subtopic == "other"
+
+
 def test_market_prompt_mentions_other_behavior():
     prompt = build_market_prompt("Title: Example")
-    assert "use `other` only when no listed subtopic fits well" in prompt
-    assert "prefer a specific listed subtopic over `other` when possible" in prompt
-    assert "affected_assets must be an array of objects" in prompt
-    assert "asset_type must be one of: equity, etf, commodity, index, fx, other" in prompt
-    assert "relation must be one of: positive, negative, mixed" in prompt
-    assert "include at most 5 assets" in prompt
+    assert "never use `fx` or `other` as sector; map FX/currency narratives to `macro`" in prompt
+    assert "use `other` only if no listed subtopic fits" in prompt
+    assert "must be objects: {symbol, asset_type, relation, confidence}" in prompt
+    assert "asset_type: equity | etf | commodity | index | fx | other" in prompt
+    assert "relation: positive | negative | mixed" in prompt
+    assert "only directly impacted assets, max 5" in prompt

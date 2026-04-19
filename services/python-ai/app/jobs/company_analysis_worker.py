@@ -312,7 +312,7 @@ def main() -> int:
     visibility_timeout = int(os.getenv("WORKER_VISIBILITY_TIMEOUT_SECONDS", "300"))
     max_attempts = int(os.getenv("WORKER_MAX_ATTEMPTS", "3"))
     limiter: RedisTokenBucket | None = None
-    limit = _get_env_int("LLM_COMPANY_MAX_REQUESTS", 0)
+    limit = _get_env_int("LLM_COMPANY_MAX_REQUESTS", 5)
     if limit >= 0:
         limiter = RedisTokenBucket.create("llm_rate_limit:company")
         limiter.reset(limit)

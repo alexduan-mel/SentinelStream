@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from functools import lru_cache
@@ -14,6 +15,13 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 
 LOGGER = logging.getLogger(__name__)
+MARKET_SECTOR_ALIAS_MAP = {
+    "fx": "macro",
+    "forex": "macro",
+    "currency": "macro",
+    "currencies": "macro",
+    "other": "macro",
+}
 
 
 def _taxonomy_paths() -> list[Path]:
@@ -85,6 +93,14 @@ def _format_taxonomy_for_prompt() -> str:
     for sector, subtopics in raw.items():
         lines.append(f"  {sector}: {', '.join(subtopics)}")
     return "\n".join(lines)
+
+
+def _normalize_taxonomy_key(value: str) -> str:
+    cleaned = value.strip().lower()
+    cleaned = cleaned.replace("-", "_")
+    cleaned = re.sub(r"\s+", "_", cleaned)
+    cleaned = re.sub(r"_+", "_", cleaned)
+    return cleaned
 
 
 class AnalysisResult(BaseModel):
@@ -162,13 +178,19 @@ class MarketAnalysisResult(BaseModel):
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("sector must be non-empty")
-        cleaned = cleaned.lower()
+        normalized = _normalize_taxonomy_key(cleaned)
         taxonomy = _load_market_taxonomy_sets()
         if not taxonomy:
             raise ValueError("sector taxonomy is not configured")
-        if cleaned not in taxonomy:
+        if normalized in taxonomy:
+            return normalized
+        alias_target = MARKET_SECTOR_ALIAS_MAP.get(normalized)
+        if alias_target and alias_target in taxonomy:
+            LOGGER.info("market_sector_alias_applied source=%s target=%s", normalized, alias_target)
+            return alias_target
+        if normalized not in taxonomy:
             raise ValueError("sector must be a supported value")
-        return cleaned
+        return normalized
 
     @field_validator("subtopic")
     @classmethod
@@ -178,13 +200,20 @@ class MarketAnalysisResult(BaseModel):
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("subtopic must be non-empty")
-        cleaned = cleaned.lower()
+        normalized = _normalize_taxonomy_key(cleaned)
         sector = info.data.get("sector") if hasattr(info, "data") else None
         if isinstance(sector, str):
             allowed = _load_market_taxonomy_sets().get(sector.lower(), set())
-            if cleaned not in allowed:
+            if normalized not in allowed:
+                if "other" in allowed:
+                    LOGGER.info(
+                        "market_subtopic_fallback_applied sector=%s source=%s target=other",
+                        sector.lower(),
+                        normalized,
+                    )
+                    return "other"
                 raise ValueError("subtopic must be a supported value for the sector")
-        return cleaned
+        return normalized
 
     @field_validator("subtopic_label")
     @classmethod
@@ -311,6 +340,7 @@ def build_market_prompt(input_text: str) -> str:
         "- sector must be one of the configured sectors\n"
         "- subtopic must be allowed for the chosen sector:\n"
         f"{_format_taxonomy_for_prompt()}\n"
+        "- never use `fx` or `other` as sector; map FX/currency narratives to `macro`\n"
         "- use `other` only if no listed subtopic fits\n"
         "- if conflict itself -> macro/geopolitics; sector-impact focus -> that sector\n\n"
         "subtopic_label:\n"
