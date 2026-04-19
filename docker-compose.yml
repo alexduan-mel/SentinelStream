@@ -74,6 +74,8 @@ services:
     depends_on:
       timescaledb:
         condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
       - ./cron:/app/cron:ro
       - ./config:/app/config:ro
@@ -92,6 +94,7 @@ services:
         condition: service_healthy
 
   analysis-worker-company:
+    profiles: ["manual"]
     build:
       context: services/python-ai
     env_file:
@@ -104,9 +107,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-    command: ["python", "-m", "jobs.company_analysis_worker"]
+    command: ["python", "-m", "jobs.company_analysis_worker", "--once", "--batch-size", "10"]
 
   analysis-worker-market:
+    profiles: ["manual"]
     build:
       context: services/python-ai
     env_file:
@@ -119,7 +123,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-    command: ["python", "-m", "jobs.market_analysis_worker"]
+    command: ["python", "-m", "jobs.market_analysis_worker", "--once", "--batch-size", "10"]
 
 
 volumes:

@@ -166,5 +166,12 @@ Expected behavior:
 - Logs fetch/insert/dedup/skip/error counts per poll cycle.
 
 Docker Compose:
-- The `scheduler` service runs both company news and market news workers via cron.
-- Defaults are every 10 minutes; override with `INGEST_CRON_SCHEDULE` and `MARKET_NEWS_CRON_SCHEDULE`.
+- The `scheduler` service runs company news, market news, company analysis, and market analysis workers via cron.
+- Defaults:
+  - `INGEST_CRON_SCHEDULE`: every 10 minutes
+  - `MARKET_NEWS_CRON_SCHEDULE`: every 10 minutes
+  - `COMPANY_ANALYSIS_CRON_SCHEDULE`: every 2 minutes
+  - `MARKET_ANALYSIS_CRON_SCHEDULE`: every 2 minutes
+- Optional batch sizing for analysis cron runs:
+  - `COMPANY_ANALYSIS_BATCH_SIZE` (default `10`)
+  - `MARKET_ANALYSIS_BATCH_SIZE` (default `10`)
