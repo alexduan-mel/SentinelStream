@@ -8,7 +8,7 @@ import SignalHeaderCard from "../../components/SignalHeaderCard";
 import SignalLineageCard from "../../components/SignalLineageCard";
 import { getTickerSignals } from "../../api/tickersApi";
 import { useAsyncData } from "../../hooks/useAsyncData";
-import type { TickerSignalItem } from "../../types";
+import type { Sentiment } from "../../utils/sentiment";
 
 const ruleChecklist = [
   {
@@ -37,7 +37,13 @@ const ruleChecklist = [
   }
 ];
 
-const modelAgreement = [
+const modelAgreement: Array<{
+  id: string;
+  model: string;
+  sentiment: Sentiment;
+  confidence: number;
+  agreement: number;
+}> = [
   {
     id: "model-1",
     model: "GPT-4",
@@ -75,12 +81,15 @@ const formatDateTime = (value: string) => {
 
 export default function SignalDetailPage() {
   const { symbol, id } = useParams();
-  const ticker = symbol ?? id ?? "";
+  const ticker = (symbol ?? id ?? "").trim().toUpperCase();
   const loadSignals = useCallback(
-    () => getTickerSignals(ticker, { limit: 50, offset: 0, includeRaw: true }),
+    () =>
+      ticker
+        ? getTickerSignals(ticker, { limit: 50, offset: 0, includeRaw: true })
+        : Promise.resolve({ ticker: "", latest: null, items: [], limit: 50, offset: 0, total: 0 }),
     [ticker]
   );
-  const { data } = useAsyncData(loadSignals);
+  const { data, error, loading } = useAsyncData(loadSignals);
 
   const latest = data?.latest ?? null;
   const evidenceItems = useMemo(
@@ -95,12 +104,6 @@ export default function SignalDetailPage() {
       })),
     [data?.items]
   );
-
-  if (!latest) {
-    return (
-      <div className="text-body text-text-secondary">Loading signal...</div>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-24">
@@ -124,6 +127,23 @@ export default function SignalDetailPage() {
         Back to Monitor
       </Link>
 
+      {!ticker ? (
+        <div className="rounded border border-border-subtle bg-bg-surface p-20 text-body text-text-secondary">
+          Invalid ticker.
+        </div>
+      ) : loading ? (
+        <div className="rounded border border-border-subtle bg-bg-surface p-20 text-body text-text-secondary">
+          Loading signal...
+        </div>
+      ) : error ? (
+        <div className="rounded border border-semantic-negative/40 bg-bg-surface p-20 text-body text-semantic-negative">
+          Failed to load signal for {ticker}: {error}
+        </div>
+      ) : !latest ? (
+        <div className="rounded border border-border-subtle bg-bg-surface p-20 text-body text-text-secondary">
+          No related signal found for {ticker} yet.
+        </div>
+      ) : (
       <div className="grid grid-cols-12 gap-24">
         <section className="col-span-8 flex flex-col gap-16">
           <SignalHeaderCard
@@ -144,6 +164,7 @@ export default function SignalDetailPage() {
           <SignalLineageCard origin="Ticker" mappedTickers={[latest.ticker]} />
         </aside>
       </div>
+      )}
     </div>
   );
 }

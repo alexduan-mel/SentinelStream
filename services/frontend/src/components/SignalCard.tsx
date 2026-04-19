@@ -5,7 +5,6 @@ import { getSentimentMeta } from "../utils/sentiment";
 interface SignalCardProps {
   ticker: string;
   sentiment: Sentiment;
-  title: string;
   description: string;
   confidence: number;
   timestamp: string;
@@ -16,7 +15,6 @@ interface SignalCardProps {
 export default function SignalCard({
   ticker,
   sentiment,
-  title,
   description,
   confidence,
   timestamp,
