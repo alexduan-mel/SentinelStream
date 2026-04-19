@@ -1,0 +1,373 @@
+from __future__ import annotations
+
+import argparse
+import logging
+import os
+import signal
+import socket
+import time
+from dataclasses import dataclass
+from typing import Iterable
+
+import psycopg2
+
+from analysis.service import analyze_company_news_event
+from llm.rate_limiter import RedisTokenBucket
+
+@dataclass(frozen=True)
+class JobRow:
+    id: int
+    job_uuid: str
+    news_event_id: int
+    job_type: str
+    trace_id: str
+    attempts: int
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Company analysis job worker")
+    parser.add_argument("--poll-interval", type=int, default=10, help="Seconds between polls")
+    parser.add_argument("--batch-size", type=int, default=1, help="Jobs to claim per loop")
+    parser.add_argument("--once", action="store_true", help="Process once and exit")
+    parser.add_argument("--worker-id", default=None, help="Worker identifier for locking")
+    return parser.parse_args()
+
+
+def _configure_logging() -> None:
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+
+
+def _get_env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise SystemExit(f"{name} must be an integer") from exc
+
+
+def _connect_db():
+    host = os.getenv("POSTGRES_HOST")
+    port = int(os.getenv("POSTGRES_PORT", "5432"))
+    name = os.getenv("POSTGRES_DB")
+    user = os.getenv("POSTGRES_USER")
+    password = os.getenv("POSTGRES_PASSWORD")
+    missing = [key for key, value in {
+        "POSTGRES_HOST": host,
+        "POSTGRES_DB": name,
+        "POSTGRES_USER": user,
+        "POSTGRES_PASSWORD": password,
+    }.items() if not value]
+    if missing:
+        raise SystemExit(f"Missing DB environment variables: {', '.join(missing)}")
+    conn = psycopg2.connect(
+        host=host,
+        port=port,
+        dbname=name,
+        user=user,
+        password=password,
+    )
+    with conn.cursor() as cursor:
+        cursor.execute("SET TIME ZONE 'UTC'")
+    conn.commit()
+    return conn
+
+
+def _claim_jobs(
+    conn,
+    batch_size: int,
+    worker_id: str,
+    max_attempts: int,
+    run_after_column: str,
+    job_types: tuple[str, ...],
+) -> list[JobRow]:
+    sql = (
+        "WITH cte AS ("
+        "  SELECT id, job_uuid, news_event_id, job_type, trace_id, attempts "
+        "  FROM analysis_jobs "
+        "  WHERE status = 'pending' "
+        f"    AND {run_after_column} <= NOW() "
+        "    AND job_type = ANY(%s) "
+        "    AND attempts < %s "
+        f"  ORDER BY {run_after_column} ASC, created_at ASC "
+        "  FOR UPDATE SKIP LOCKED "
+        "  LIMIT %s"
+        ") "
+        "UPDATE analysis_jobs j "
+        "SET status = 'running', locked_at = NOW(), locked_by = %s, updated_at = NOW() "
+        "FROM cte "
+        "WHERE j.id = cte.id "
+        "RETURNING j.id, j.job_uuid::text, j.news_event_id, j.job_type, j.trace_id::text, "
+        "cte.attempts"
+    )
+    with conn.cursor() as cursor:
+        cursor.execute(sql, (list(job_types), max_attempts, batch_size, worker_id))
+        rows = cursor.fetchall()
+    conn.commit()
+    return [JobRow(*row) for row in rows]
+
+
+def _mark_done(conn, job_id: int) -> None:
+    sql = (
+        "UPDATE analysis_jobs "
+        "SET status = 'done', updated_at = NOW(), last_error = NULL "
+        "WHERE id = %s"
+    )
+    with conn.cursor() as cursor:
+        cursor.execute(sql, (job_id,))
+    conn.commit()
+
+
+def _mark_failed(
+    conn, job: JobRow, error: str, retryable: bool, max_attempts: int, run_after_column: str
+) -> None:
+    next_attempts = job.attempts + 1
+    if retryable and next_attempts < max_attempts:
+        backoff_seconds = 2 ** next_attempts
+        sql = (
+            "UPDATE analysis_jobs "
+            "SET status = 'pending', attempts = attempts + 1, last_error = %s, "
+            f"{run_after_column} = NOW() + (%s || ' seconds')::interval, updated_at = NOW(), "
+            "locked_at = NULL, locked_by = NULL "
+            "WHERE id = %s"
+        )
+        params = (error[:500], backoff_seconds, job.id)
+    else:
+        sql = (
+            "UPDATE analysis_jobs "
+            "SET status = 'failed', attempts = attempts + 1, last_error = %s, updated_at = NOW(), "
+            "locked_at = NULL, locked_by = NULL "
+            "WHERE id = %s"
+        )
+        params = (error[:500], job.id)
+    with conn.cursor() as cursor:
+        cursor.execute(sql, params)
+    conn.commit()
+
+
+def _release_job(conn, job_id: int) -> None:
+    sql = (
+        "UPDATE analysis_jobs "
+        "SET status = 'pending', locked_at = NULL, locked_by = NULL, updated_at = NOW() "
+        "WHERE id = %s"
+    )
+    with conn.cursor() as cursor:
+        cursor.execute(sql, (job_id,))
+    conn.commit()
+
+
+def _recover_stuck_jobs(conn, visibility_timeout_seconds: int) -> int:
+    sql = (
+        "UPDATE analysis_jobs "
+        "SET status = 'pending', locked_at = NULL, locked_by = NULL, updated_at = NOW() "
+        "WHERE status = 'running' AND locked_at IS NOT NULL "
+        "AND locked_at < NOW() - (%s || ' seconds')::interval"
+    )
+    with conn.cursor() as cursor:
+        cursor.execute(sql, (visibility_timeout_seconds,))
+        recovered = cursor.rowcount
+    conn.commit()
+    return recovered
+
+
+def _is_retryable_error(error_message: str | None) -> bool:
+    if not error_message:
+        return False
+    lowered = error_message.lower()
+    if "insufficient_quota" in lowered or "401" in lowered or "403" in lowered:
+        return False
+    if "timeout" in lowered:
+        return True
+    if "json" in lowered:
+        return True
+    if "validation" in lowered:
+        return True
+    return False
+
+
+def _process_jobs(
+    conn,
+    jobs: Iterable[JobRow],
+    logger: logging.Logger,
+    max_attempts: int,
+    run_after_column: str,
+    limiter: RedisTokenBucket | None,
+) -> None:
+    for job in jobs:
+        start_time = time.monotonic()
+        try:
+            if job.job_type not in ("llm_analysis_company", "llm_analysis"):
+                error_message = f"unsupported_job_type:{job.job_type}"
+                _mark_failed(conn, job, error_message, False, max_attempts, run_after_column)
+                logger.error(
+                    "job_failed job_id=%s news_event_id=%s attempts=%s retryable=%s error=%s duration_ms=%s",
+                    job.id,
+                    job.news_event_id,
+                    job.attempts + 1,
+                    False,
+                    error_message,
+                    int((time.monotonic() - start_time) * 1000),
+                )
+                continue
+
+            if limiter is not None:
+                remaining = limiter.consume(1)
+                if remaining < 0:
+                    _release_job(conn, job.id)
+                    logger.warning(
+                        "job_rate_limited job_id=%s news_event_id=%s attempts=%s remaining=%s",
+                        job.id,
+                        job.news_event_id,
+                        job.attempts + 1,
+                        remaining,
+                    )
+                    continue
+
+            result = analyze_company_news_event(job.news_event_id, job.id)
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            if result.get("status") == "succeeded":
+                _mark_done(conn, job.id)
+                logger.info(
+                    "job_done job_id=%s news_event_id=%s attempts=%s provider=%s duration_ms=%s",
+                    job.id,
+                    job.news_event_id,
+                    job.attempts + 1,
+                    result.get("provider"),
+                    duration_ms,
+                )
+            else:
+                error_message = result.get("error_message", "analysis_failed")
+                retryable = _is_retryable_error(error_message)
+                _mark_failed(conn, job, error_message, retryable, max_attempts, run_after_column)
+                logger.error(
+                    "job_failed job_id=%s news_event_id=%s attempts=%s retryable=%s provider=%s error=%s duration_ms=%s",
+                    job.id,
+                    job.news_event_id,
+                    job.attempts + 1,
+                    retryable,
+                    result.get("provider"),
+                    error_message,
+                    duration_ms,
+                )
+            continue
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            raise
+        except Exception as exc:  # noqa: BLE001
+            error_message = str(exc)
+            retryable = _is_retryable_error(error_message)
+            try:
+                _mark_failed(conn, job, error_message, retryable, max_attempts, run_after_column)
+                logger.error(
+                    "job_failed job_id=%s news_event_id=%s attempts=%s retryable=%s error=%s",
+                    job.id,
+                    job.news_event_id,
+                    job.attempts + 1,
+                    retryable,
+                    error_message,
+                )
+            except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                raise
+
+
+def _get_run_after_column(conn) -> str:
+    sql = (
+        "SELECT column_name "
+        "FROM information_schema.columns "
+        "WHERE table_name = 'analysis_jobs' AND column_name IN ('run_after','next_run_at')"
+    )
+    with conn.cursor() as cursor:
+        cursor.execute(sql)
+        columns = {row[0] for row in cursor.fetchall()}
+    if "run_after" in columns:
+        return "run_after"
+    if "next_run_at" in columns:
+        return "next_run_at"
+    raise RuntimeError("analysis_jobs missing run_after/next_run_at column")
+
+
+def main() -> int:
+    _configure_logging()
+    args = _parse_args()
+    logger = logging.getLogger(__name__)
+
+    running = {"value": True}
+
+    def _handle_shutdown(signum, _frame):  # noqa: ANN001
+        logger.info("worker_shutdown signal=%s", signum)
+        running["value"] = False
+
+    signal.signal(signal.SIGTERM, _handle_shutdown)
+    signal.signal(signal.SIGINT, _handle_shutdown)
+
+    worker_id = args.worker_id
+    if not worker_id:
+        worker_id = f"{socket.gethostname()}:{os.getpid()}"
+
+    poll_seconds = int(os.getenv("WORKER_POLL_SECONDS", str(args.poll_interval)))
+    visibility_timeout = int(os.getenv("WORKER_VISIBILITY_TIMEOUT_SECONDS", "300"))
+    max_attempts = int(os.getenv("WORKER_MAX_ATTEMPTS", "3"))
+    limiter: RedisTokenBucket | None = None
+    limit = _get_env_int("LLM_COMPANY_MAX_REQUESTS", 0)
+    if limit >= 0:
+        limiter = RedisTokenBucket.create("llm_rate_limit:company")
+        limiter.reset(limit)
+        logger.info("llm_rate_limit_init scope=company limit=%s", limit)
+
+    job_types = ("llm_analysis_company", "llm_analysis")
+
+    while running["value"]:
+        try:
+            with _connect_db() as conn:
+                run_after_column = _get_run_after_column(conn)
+
+                while running["value"]:
+                    try:
+                        recovered = _recover_stuck_jobs(conn, visibility_timeout)
+                        if recovered:
+                            logger.info("worker_recovered_jobs count=%s", recovered)
+
+                        batch_size = args.batch_size
+                        if limiter is not None:
+                            remaining = limiter.remaining()
+                            if remaining <= 0:
+                                if args.once:
+                                    return 0
+                                time.sleep(max(poll_seconds, 1))
+                                continue
+                            batch_size = min(batch_size, remaining)
+
+                        jobs = _claim_jobs(
+                            conn, batch_size, worker_id, max_attempts, run_after_column, job_types
+                        )
+                        if not jobs:
+                            if args.once:
+                                return 0
+                            time.sleep(max(poll_seconds, 1))
+                            continue
+
+                        _process_jobs(conn, jobs, logger, max_attempts, run_after_column, limiter)
+
+                        if args.once:
+                            return 0
+                    except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
+                        logger.error("db_connection_lost error=%s", exc)
+                        break
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
+            logger.error("db_connection_failed error=%s", exc)
+            if args.once:
+                return 1
+
+        if args.once:
+            break
+        time.sleep(min(max(poll_seconds, 1), 30))
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

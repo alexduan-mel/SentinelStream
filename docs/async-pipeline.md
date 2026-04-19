@@ -17,14 +17,14 @@ PYTHONPATH=services/python-ai/app \
 
 ```bash
 PYTHONPATH=services/python-ai/app \
-  python -m jobs.worker --batch-size 10
+  python -m jobs.company_analysis_worker --batch-size 10
 ```
 
 Use `--once` to process the current queue and exit:
 
 ```bash
 PYTHONPATH=services/python-ai/app \
-  python -m jobs.worker --batch-size 10 --once
+  python -m jobs.company_analysis_worker --batch-size 10 --once
 ```
 
 ## Scale workers

@@ -91,35 +91,35 @@ services:
       timescaledb:
         condition: service_healthy
 
-  # analysis-worker-company:
-  #   build:
-  #     context: services/python-ai
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
-  #     - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-  #   depends_on:
-  #     timescaledb:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_started
-  #   command: ["python", "-m", "jobs.worker"]
+  analysis-worker-company:
+    build:
+      context: services/python-ai
+    env_file:
+      - .env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: ["python", "-m", "jobs.company_analysis_worker"]
 
-  # analysis-worker-market:
-  #   build:
-  #     context: services/python-ai
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
-  #     - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-  #   depends_on:
-  #     timescaledb:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_started
-  #   command: ["python", "-m", "jobs.market_worker"]
+  analysis-worker-market:
+    build:
+      context: services/python-ai
+    env_file:
+      - .env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: ["python", "-m", "jobs.market_analysis_worker"]
 
 
 volumes:

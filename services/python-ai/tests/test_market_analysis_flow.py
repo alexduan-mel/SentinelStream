@@ -7,7 +7,7 @@ from uuid import uuid4
 import psycopg2
 import pytest
 
-from jobs import market_worker as worker
+from jobs import market_analysis_worker as worker
 from llm.interface import LLMClient, LLMProviderResponse
 import analysis.service as analysis_service
 

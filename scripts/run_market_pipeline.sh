@@ -61,7 +61,7 @@ PY
   if [[ "$pending" -eq 0 ]]; then
     break
   fi
-  "$PYTHON_BIN" -m jobs.market_worker --once --batch-size "$BATCH_SIZE"
+  "$PYTHON_BIN" -m jobs.market_analysis_worker --once --batch-size "$BATCH_SIZE"
 done
 
 echo "==> market_aggregation_worker --once"

@@ -64,7 +64,7 @@ symbol (MU, SMH, NVDA...)
 ### llm analysis worker
 Run in python-ai container:
 ```bash
-docker compose run --rm python-ai python -m jobs.market_worker --once --batch-size 10
+docker compose run --rm python-ai python -m jobs.market_analysis_worker --once --batch-size 10
 ```
 ### aggregation worker
 
