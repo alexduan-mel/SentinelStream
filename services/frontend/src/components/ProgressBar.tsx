@@ -13,9 +13,9 @@ const toneStyles: Record<NonNullable<ProgressBarProps["tone"]>, string> = {
 
 export default function ProgressBar({ value, tone = "info" }: ProgressBarProps) {
   return (
-    <div className="h-4 w-full rounded-pill bg-border-subtle">
+    <div className="h-4 w-full rounded bg-border-subtle">
       <div
-        className={["h-4 rounded-pill", toneStyles[tone]].join(" ")}
+        className={["h-4 rounded", toneStyles[tone]].join(" ")}
         style={{ width: `${Math.max(0, Math.min(value, 100))}%` }}
       />
     </div>

@@ -1,1 +1,4 @@
-__INGEST_CRON_SCHEDULE__ python -m app.ingest_once >> /proc/1/fd/1 2>> /proc/1/fd/2
+__INGEST_CRON_SCHEDULE__ python -m workers.company_news_worker >> /proc/1/fd/1 2>> /proc/1/fd/2
+__MARKET_NEWS_CRON_SCHEDULE__ python -m workers.market_news_worker --once >> /proc/1/fd/1 2>> /proc/1/fd/2
+__COMPANY_ANALYSIS_CRON_SCHEDULE__ python -m jobs.company_analysis_worker --once --batch-size ${COMPANY_ANALYSIS_BATCH_SIZE:-10} >> /proc/1/fd/1 2>> /proc/1/fd/2
+__MARKET_ANALYSIS_CRON_SCHEDULE__ python -m jobs.market_analysis_worker --once --batch-size ${MARKET_ANALYSIS_BATCH_SIZE:-10} >> /proc/1/fd/1 2>> /proc/1/fd/2

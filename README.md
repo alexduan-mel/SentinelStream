@@ -109,8 +109,12 @@ The system can be started locally using Docker Compose.
 ```bash
 docker compose up --build
 
-docker compose down -v
+# Restart while keeping database/data volumes
+docker compose down
 docker compose up -d
+
+# Optional: wipe volumes (removes DB data)
+docker compose down -v
 
 
 # Check Java service
@@ -145,3 +149,33 @@ docker compose exec timescaledb psql -U postgres -d sentinel
 \du 
 # list tables
 \dt
+
+### Market News Worker
+
+Environment variables:
+- `FINNHUB_API_KEY` (required)
+- `MARKET_NEWS_CATEGORY` (default: `general,merger`, comma-separated)
+- `MARKET_NEWS_POLL_SECONDS` (default: `300`)
+- `LOG_LEVEL` (default: `INFO`)
+
+Run locally:
+
+```bash
+python -m workers.market_news_worker
+```
+
+Expected behavior:
+- Polls Finnhub market news on the configured interval.
+- Normalizes records into `news_events` with `scope=market`, `event_type=market_news`, and `source=finnhub`.
+- Logs fetch/insert/dedup/skip/error counts per poll cycle.
+
+Docker Compose:
+- The `scheduler` service runs company news, market news, company analysis, and market analysis workers via cron.
+- Defaults:
+  - `INGEST_CRON_SCHEDULE`: every 10 minutes
+  - `MARKET_NEWS_CRON_SCHEDULE`: every 10 minutes
+  - `COMPANY_ANALYSIS_CRON_SCHEDULE`: every 2 minutes
+  - `MARKET_ANALYSIS_CRON_SCHEDULE`: every 2 minutes
+- Optional batch sizing for analysis cron runs:
+  - `COMPANY_ANALYSIS_BATCH_SIZE` (default `10`)
+  - `MARKET_ANALYSIS_BATCH_SIZE` (default `10`)

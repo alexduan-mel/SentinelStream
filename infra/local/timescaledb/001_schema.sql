@@ -33,9 +33,13 @@ CREATE TABLE IF NOT EXISTS news_events (
   id              BIGSERIAL PRIMARY KEY,
   news_id         CHAR(64) NOT NULL,
   trace_id        UUID NOT NULL,          -- correlation ID per pipeline run
-  source          TEXT NOT NULL,          -- e.g., finnhub / polygon / rss
+  provider        TEXT NOT NULL,          -- e.g., finnhub / polygon / rss
+  publisher       TEXT,                  -- original news outlet (e.g., Reuters)
   request_ticker  TEXT,                  -- ticker used in the provider request (if any)
   source_event_id TEXT,                  -- provider-specific ID if available
+  scope           TEXT,                  -- market | company | sector (optional)
+  event_type      TEXT,                  -- market_news | company_news (optional)
+  primary_symbol  TEXT,                  -- primary ticker if confidently derivable
 
   published_at    TIMESTAMPTZ NOT NULL,   -- from provider (point-in-time context)
   ingested_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),  -- system ingestion time
@@ -49,16 +53,20 @@ CREATE TABLE IF NOT EXISTS news_events (
   raw_payload     JSONB,                  -- raw provider payload for debugging/replay
 
   CONSTRAINT uq_news_events_news_id UNIQUE (news_id),
-  CONSTRAINT uq_news_source_url UNIQUE (source, url)
+  CONSTRAINT uq_news_provider_url UNIQUE (provider, url)
 );
 
 COMMENT ON TABLE news_events IS 'Normalized news events ingested from external sources';
 COMMENT ON COLUMN news_events.id IS 'Surrogate primary key';
-COMMENT ON COLUMN news_events.news_id IS 'Deterministic unique ID (recommended: sha256(source|url))';
+COMMENT ON COLUMN news_events.news_id IS 'Deterministic unique ID (recommended: sha256(provider|url))';
 COMMENT ON COLUMN news_events.trace_id IS 'Correlation ID for a single pipeline run';
-COMMENT ON COLUMN news_events.source IS 'News provider name';
+COMMENT ON COLUMN news_events.provider IS 'News provider name';
+COMMENT ON COLUMN news_events.publisher IS 'Original news outlet name';
 COMMENT ON COLUMN news_events.request_ticker IS 'Ticker used in the provider request (if any)';
 COMMENT ON COLUMN news_events.source_event_id IS 'Provider-specific event ID if available';
+COMMENT ON COLUMN news_events.scope IS 'News scope: market | company | sector (optional)';
+COMMENT ON COLUMN news_events.event_type IS 'News event type (optional)';
+COMMENT ON COLUMN news_events.primary_symbol IS 'Primary ticker if confidently derivable';
 COMMENT ON COLUMN news_events.published_at IS 'Published time from provider (UTC)';
 COMMENT ON COLUMN news_events.ingested_at IS 'Ingestion time in SentinelStream (UTC)';
 COMMENT ON COLUMN news_events.tickers IS 'Tickers associated with this news event (MVP as TEXT[])';
@@ -66,8 +74,10 @@ COMMENT ON COLUMN news_events.raw_payload IS 'Raw provider payload stored for de
 
 -- Indexes for dashboard queries
 CREATE INDEX IF NOT EXISTS idx_news_published_at ON news_events (published_at DESC);
-CREATE INDEX IF NOT EXISTS idx_news_source ON news_events (source);
+CREATE INDEX IF NOT EXISTS idx_news_provider ON news_events (provider);
 CREATE INDEX IF NOT EXISTS idx_news_request_ticker ON news_events (request_ticker);
+CREATE INDEX IF NOT EXISTS idx_news_request_ticker_published_at
+  ON news_events (request_ticker, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_news_tickers_gin ON news_events USING GIN (tickers);
 CREATE INDEX IF NOT EXISTS idx_news_news_id ON news_events (news_id);
 
@@ -176,6 +186,7 @@ CREATE TABLE IF NOT EXISTS llm_analyses (
   analysis_uuid   UUID NOT NULL DEFAULT gen_random_uuid(),
 
   news_event_id   BIGINT NOT NULL REFERENCES news_events(id) ON DELETE CASCADE,
+  analysis_job_id BIGINT NULL REFERENCES analysis_jobs(id) ON DELETE SET NULL,
   trace_id        UUID NOT NULL,          -- same trace_id used in this processing run
 
   provider        TEXT NOT NULL,          -- openai / gemini
@@ -205,6 +216,7 @@ COMMENT ON TABLE llm_analyses IS 'LLM analysis results (raw output + parsed fiel
 COMMENT ON COLUMN llm_analyses.id IS 'Surrogate primary key';
 COMMENT ON COLUMN llm_analyses.analysis_uuid IS 'Stable UUID for an analysis row';
 COMMENT ON COLUMN llm_analyses.news_event_id IS 'FK to news_events.id';
+COMMENT ON COLUMN llm_analyses.analysis_job_id IS 'FK to analysis_jobs.id (nullable)';
 COMMENT ON COLUMN llm_analyses.trace_id IS 'Correlation ID for the processing run';
 COMMENT ON COLUMN llm_analyses.provider IS 'LLM provider name';
 COMMENT ON COLUMN llm_analyses.model IS 'Exact model identifier';
@@ -219,6 +231,9 @@ COMMENT ON COLUMN llm_analyses.raw_output IS 'Normalized raw output object for d
 
 CREATE INDEX IF NOT EXISTS idx_analysis_news_event_created_at
   ON llm_analyses (news_event_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analysis_news_event_id
+  ON llm_analyses (news_event_id);
+CREATE INDEX IF NOT EXISTS idx_analysis_job_id ON llm_analyses (analysis_job_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_created_at ON llm_analyses (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_analysis_sentiment_created_at
   ON llm_analyses (sentiment, created_at DESC);

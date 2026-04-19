@@ -38,13 +38,14 @@ def test_publish_job_dedup(db_conn):
 
     with db_conn.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO news_events (news_id, trace_id, source, published_at, ingested_at, title, url, content, tickers, raw_payload) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+            "INSERT INTO news_events (news_id, trace_id, provider, publisher, published_at, ingested_at, title, url, content, tickers, raw_payload) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
             "RETURNING id",
             (
                 news_id,
                 str(trace_id),
                 "finnhub",
+                "Reuters",
                 now,
                 now,
                 "Test title",
@@ -65,7 +66,7 @@ def test_publish_job_dedup(db_conn):
     with db_conn.cursor() as cursor:
         cursor.execute(
             "SELECT COUNT(*), MIN(id) FROM analysis_jobs WHERE news_event_id = %s AND job_type = %s",
-            (news_event_id, "llm_analysis"),
+            (news_event_id, "llm_analysis_company"),
         )
         count = cursor.fetchone()[0]
     assert count == 1

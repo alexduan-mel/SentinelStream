@@ -7,5 +7,8 @@ INSERT INTO tickers (symbol, name, exchange)
 VALUES
   ('AAPL', 'Apple Inc.', 'NASDAQ'),
   ('GOOGL', 'Alphabet Inc. (Google)', 'NASDAQ'),
-  ('MSFT', 'Microsoft Corporation', 'NASDAQ')
+  ('MSFT', 'Microsoft Corporation', 'NASDAQ'),
+  ('CRML', 'Critical Metals Corp.', 'NASDAQ'),
+  ('RKLB', 'Rocket Lab USA, Inc.', 'NASDAQ'),
+  ('QBTS', 'D-Wave Quantum Inc.', 'NYSE')
 ON CONFLICT (symbol) DO NOTHING;

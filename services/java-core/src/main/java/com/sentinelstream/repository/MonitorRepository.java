@@ -35,7 +35,7 @@ public class MonitorRepository {
                    s.published_at,
                    s.title,
                    s.url,
-                   s.source
+                   s.publisher
             FROM tickers t
             LEFT JOIN LATERAL (
                 SELECT la.analysis_uuid,
@@ -45,7 +45,7 @@ public class MonitorRepository {
                        ne.published_at,
                        ne.title,
                        ne.url,
-                       ne.source
+                       ne.publisher
                 FROM news_events ne
                 JOIN llm_analyses la ON la.news_event_id = ne.id
                 WHERE la.status = 'succeeded'
@@ -77,7 +77,7 @@ public class MonitorRepository {
                 rs.getObject("published_at", OffsetDateTime.class),
                 rs.getString("title"),
                 rs.getString("url"),
-                rs.getString("source")
+                rs.getString("publisher")
             );
             return new MonitorRowResponse(ticker, signal);
         }

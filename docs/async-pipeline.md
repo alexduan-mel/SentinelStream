@@ -10,21 +10,21 @@ In M1, "publishing" means writing a row into the `analysis_jobs` table in Postgr
 
 ```bash
 PYTHONPATH=services/python-ai/app \
-  python -m ingestion.run --minutes-back 60 --process-limit 200
+  python -m workers.company_news_worker --minutes-back 60 --process-limit 200
 ```
 
 2) Run a worker (processes jobs):
 
 ```bash
 PYTHONPATH=services/python-ai/app \
-  python -m jobs.worker --batch-size 10
+  python -m jobs.company_analysis_worker --batch-size 10
 ```
 
 Use `--once` to process the current queue and exit:
 
 ```bash
 PYTHONPATH=services/python-ai/app \
-  python -m jobs.worker --batch-size 10 --once
+  python -m jobs.company_analysis_worker --batch-size 10 --once
 ```
 
 ## Scale workers

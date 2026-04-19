@@ -12,14 +12,15 @@ import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import Json
 
+from ingestion.company_news_normalizer import NormalizationError, normalize_finnhub
+from ingestion.company_news_raw_store import insert_raw_items, mark_raw_failed, mark_raw_normalized, select_raw_items
 from ingestion.finnhub_client import FinnhubError, fetch_company_news
-from ingestion.news_store import upsert_news_event
-from ingestion.normalizer import NormalizationError, normalize_finnhub
-from ingestion.raw_store import insert_raw_items, mark_raw_failed, mark_raw_normalized, select_raw_items
+from ingestion.news_event_store import upsert_news_event
+from ingestion.time_windows import resolve_company_news_dates
 from jobs.publisher import publish_job
 
-JOB_NAME = "finnhub_ingestion"
-LOCK_KEY = "finnhub_ingestion"
+JOB_NAME = "finnhub_company_news"
+LOCK_KEY = "finnhub_company_news"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -269,8 +270,13 @@ def main() -> int:
     )
     # Finnhub company-news accepts YYYY-MM-DD only, so we fetch by date range.
     # Dates are based on NYC local time, not the server timezone.
-    date_from = window_start_nyc.date().isoformat()
-    date_to = window_end_nyc.date().isoformat()
+    date_from, date_to = resolve_company_news_dates(window_start_nyc, window_end_nyc)
+    logger.info(
+        "finnhub_date_range_nyc trace_id=%s from=%s to=%s",
+        trace_id,
+        date_from,
+        date_to,
+    )
 
     requested = None
     if args.tickers:
@@ -407,7 +413,7 @@ def main() -> int:
                 news_upsert_count += 1
                 if inserted:
                     news_inserted_count += 1
-                job_inserted = publish_job(conn, event_id, trace_id)
+                job_inserted = publish_job(conn, event_id, trace_id, job_type="llm_analysis_company")
                 if job_inserted:
                     jobs_enqueued_count += 1
                 else:

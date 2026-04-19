@@ -28,6 +28,11 @@ services:
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
       - ./infra/local/timescaledb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -48,8 +53,12 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - timescaledb
-      - redis
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./config:/app/config:ro
 
   scheduler:
     build:
@@ -63,9 +72,13 @@ services:
     command: ["/app/cron/run-supercronic.sh"]
     restart: unless-stopped
     depends_on:
-      - timescaledb
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
       - ./cron:/app/cron:ro
+      - ./config:/app/config:ro
 
   java-core:
     build:
@@ -77,9 +90,11 @@ services:
       - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
     depends_on:
-      - timescaledb
+      timescaledb:
+        condition: service_healthy
 
-  analysis-worker:
+  analysis-worker-company:
+    profiles: ["manual"]
     build:
       context: services/python-ai
     env_file:
@@ -88,9 +103,28 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     depends_on:
-      - timescaledb
-      - redis
-    command: ["python", "-m", "jobs.worker"]
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: ["python", "-m", "jobs.company_analysis_worker", "--once", "--batch-size", "10"]
+
+  analysis-worker-market:
+    profiles: ["manual"]
+    build:
+      context: services/python-ai
+    env_file:
+      - .env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: ["python", "-m", "jobs.market_analysis_worker", "--once", "--batch-size", "10"]
+
 
 volumes:
   timescaledb_data:

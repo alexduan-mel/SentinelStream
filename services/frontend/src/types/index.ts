@@ -14,7 +14,7 @@ export interface Signal {
 
 export interface SignalEvidenceItem {
   id: string;
-  source: string;
+  publisher: string;
   headline: string;
   timestamp: string;
   confidence: number;
@@ -34,7 +34,7 @@ export interface SignalDetail {
 export interface NewsSummary {
   title: string;
   url: string;
-  source: string;
+  publisher: string | null;
 }
 
 export interface AnalysisResult {

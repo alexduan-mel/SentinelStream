@@ -98,3 +98,30 @@ def fetch_company_news(
         len(payload),
     )
     return payload, status_code
+
+
+def fetch_market_news(
+    client: httpx.Client,
+    token: str,
+    category: str,
+    *,
+    trace_id: UUID | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    url = f"{BASE_URL}/news"
+    params = {
+        "category": category,
+        "token": token,
+    }
+    response = _request_with_retries(client, url, params, trace_id=trace_id, ticker=category)
+    status_code = response.status_code
+    payload = response.json()
+    if not isinstance(payload, list):
+        raise FinnhubError(f"Unexpected Finnhub payload: {payload}")
+    LOGGER.info(
+        "finnhub_market_news_items trace_id=%s category=%s status=%s items=%s",
+        trace_id,
+        category,
+        status_code,
+        len(payload),
+    )
+    return payload, status_code

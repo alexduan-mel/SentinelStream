@@ -42,7 +42,7 @@ export default function BacktestPage() {
               <div key={month}>{month}</div>
             ))}
           </div>
-          <div className="mt-16 h-64 rounded-md border border-border-subtle bg-bg-elevated" />
+          <div className="mt-16 h-64 rounded border border-border-subtle bg-bg-elevated" />
         </Card>
         <Card title="Rule Contribution" className="col-span-4">
           <div className="flex flex-col gap-16">
@@ -78,13 +78,13 @@ export default function BacktestPage() {
         </Card>
         <Card title="False Analysis" className="col-span-4">
           <div className="flex flex-col gap-12">
-            <div className="rounded-md border border-border-subtle bg-bg-elevated p-16">
+            <div className="rounded border border-border-subtle bg-bg-elevated p-16">
               <div className="text-caption text-text-muted">False Positives</div>
               <div className="text-h2 text-semantic-negative">
                 {falseAnalysis ? falseAnalysis.falsePositives : "--"}
               </div>
             </div>
-            <div className="rounded-md border border-border-subtle bg-bg-elevated p-16">
+            <div className="rounded border border-border-subtle bg-bg-elevated p-16">
               <div className="text-caption text-text-muted">False Negatives</div>
               <div className="text-h2 text-semantic-warning">
                 {falseAnalysis ? falseAnalysis.falseNegatives : "--"}

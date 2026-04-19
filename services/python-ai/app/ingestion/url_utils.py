@@ -55,7 +55,7 @@ def canonicalize_url(url: str) -> str:
     return urlunsplit((scheme, netloc, path, query, ""))
 
 
-def generate_news_id(source: str, url: str) -> str:
+def generate_news_id(provider: str, url: str) -> str:
     canonical_url = canonicalize_url(url)
-    raw = f"{source}|{canonical_url}"
+    raw = f"{provider}|{canonical_url}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()

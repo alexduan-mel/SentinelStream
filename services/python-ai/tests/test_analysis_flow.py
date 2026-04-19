@@ -7,7 +7,7 @@ from uuid import uuid4
 import psycopg2
 import pytest
 
-from jobs import worker
+from jobs import company_analysis_worker as worker
 from llm.interface import LLMClient, LLMProviderResponse, ProviderError
 import analysis.service as analysis_service
 
@@ -48,12 +48,13 @@ def _insert_news_event(conn) -> int:
     now = datetime.now(timezone.utc)
     with conn.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO news_events (news_id, trace_id, source, published_at, ingested_at, title, url, content, tickers, raw_payload) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            "INSERT INTO news_events (news_id, trace_id, provider, publisher, published_at, ingested_at, title, url, content, tickers, raw_payload) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (
                 news_id,
                 str(uuid4()),
                 "finnhub",
+                "Reuters",
                 now,
                 now,
                 "Test title",
@@ -68,19 +69,21 @@ def _insert_news_event(conn) -> int:
     return event_id
 
 
-def _insert_job(conn, news_event_id: int) -> None:
+def _insert_job(conn, news_event_id: int) -> int:
     with conn.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO analysis_jobs (news_event_id, trace_id, job_type) VALUES (%s, %s, %s)",
-            (news_event_id, str(uuid4()), "llm_analysis"),
+            "INSERT INTO analysis_jobs (news_event_id, trace_id, job_type) VALUES (%s, %s, %s) RETURNING id",
+            (news_event_id, str(uuid4()), "llm_analysis_company"),
         )
+        job_id = cursor.fetchone()[0]
     conn.commit()
+    return job_id
 
 
 def _fetch_analysis(conn, news_event_id: int):
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT status, sentiment, confidence, summary, error_message, raw_output, id "
+            "SELECT status, sentiment, confidence, summary, error_message, raw_output, analysis_job_id, id "
             "FROM llm_analyses WHERE news_event_id = %s "
             "ORDER BY created_at DESC LIMIT 1",
             (news_event_id,),
@@ -122,7 +125,14 @@ def _run_with_provider(monkeypatch, provider, max_retries=2):
 def _run_worker_once(max_attempts: int = 1):
     with _db_conn() as conn:
         run_after_column = worker._get_run_after_column(conn)
-        jobs = worker._claim_jobs(conn, 10, "test", max_attempts, run_after_column)
+        jobs = worker._claim_jobs(
+            conn,
+            10,
+            "test",
+            max_attempts,
+            run_after_column,
+            ("llm_analysis_company", "llm_analysis"),
+        )
         worker._process_jobs(conn, jobs, logging.getLogger("test"), max_attempts, run_after_column)
 
 
@@ -132,7 +142,7 @@ def test_happy_path(monkeypatch):
 
     with _db_conn() as conn:
         news_event_id = _insert_news_event(conn)
-        _insert_job(conn, news_event_id)
+        job_id = _insert_job(conn, news_event_id)
 
     _run_with_provider(monkeypatch, provider, max_retries=2)
     _run_worker_once(max_attempts=1)
@@ -144,7 +154,8 @@ def test_happy_path(monkeypatch):
         assert float(row[2]) == 0.9
         assert row[3] == "Strong demand."
         raw_output = row[5]
-        analysis_id = row[6]
+        assert row[6] == job_id
+        analysis_id = row[7]
         assert isinstance(raw_output, dict)
         assert raw_output["error"] is None
         assert raw_output["output_json"]["tickers"] == ["AAPL", "MSFT"]

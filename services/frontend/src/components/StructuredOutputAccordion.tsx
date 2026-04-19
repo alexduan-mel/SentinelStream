@@ -34,7 +34,7 @@ export default function StructuredOutputAccordion({ data }: StructuredOutputAcco
         </svg>
       </button>
       {isOpen && (
-        <pre className="mt-16 rounded-md border border-border-subtle bg-bg-elevated p-16 text-mono font-mono text-text-secondary">
+        <pre className="mt-16 rounded border border-border-subtle bg-bg-elevated p-16 text-mono font-mono text-text-secondary">
           {payload}
         </pre>
       )}
