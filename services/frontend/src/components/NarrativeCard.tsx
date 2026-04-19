@@ -10,12 +10,6 @@ const directionStyle: Record<NarrativeDirection, string> = {
   neutral: "text-semantic-neutral"
 };
 
-const directionBorder: Record<NarrativeDirection, string> = {
-  bullish: "border-l-semantic-positive",
-  bearish: "border-l-semantic-negative",
-  neutral: "border-l-border-default"
-};
-
 const statusBadgeStyle: Record<NarrativeStatus, string> = {
   Emerging: "text-semantic-info bg-bg-elevated border-border-default",
   Developing: "text-semantic-warning bg-bg-elevated border-border-default",
