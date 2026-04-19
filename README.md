@@ -109,8 +109,12 @@ The system can be started locally using Docker Compose.
 ```bash
 docker compose up --build
 
-docker compose down -v
+# Restart while keeping database/data volumes
+docker compose down
 docker compose up -d
+
+# Optional: wipe volumes (removes DB data)
+docker compose down -v
 
 
 # Check Java service

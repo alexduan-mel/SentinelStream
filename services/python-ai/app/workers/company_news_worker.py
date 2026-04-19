@@ -16,6 +16,7 @@ from ingestion.company_news_normalizer import NormalizationError, normalize_finn
 from ingestion.company_news_raw_store import insert_raw_items, mark_raw_failed, mark_raw_normalized, select_raw_items
 from ingestion.finnhub_client import FinnhubError, fetch_company_news
 from ingestion.news_event_store import upsert_news_event
+from ingestion.time_windows import resolve_company_news_dates
 from jobs.publisher import publish_job
 
 JOB_NAME = "finnhub_company_news"
@@ -269,8 +270,13 @@ def main() -> int:
     )
     # Finnhub company-news accepts YYYY-MM-DD only, so we fetch by date range.
     # Dates are based on NYC local time, not the server timezone.
-    date_from = window_start_nyc.date().isoformat()
-    date_to = window_end_nyc.date().isoformat()
+    date_from, date_to = resolve_company_news_dates(window_start_nyc, window_end_nyc)
+    logger.info(
+        "finnhub_date_range_nyc trace_id=%s from=%s to=%s",
+        trace_id,
+        date_from,
+        date_to,
+    )
 
     requested = None
     if args.tickers:
