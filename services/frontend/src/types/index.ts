@@ -64,6 +64,33 @@ export interface TickerSignalsResponse {
   total: number;
 }
 
+export type TickerRowStatus = "active" | "paused" | "error";
+export type TickerJobStatus = "running" | "idle" | "failed";
+
+export interface TickerManagementSummary {
+  totalTickers: number;
+  active: number;
+  paused: number;
+  errors: number;
+}
+
+export interface TickerManagementItem {
+  symbol: string;
+  name: string;
+  exchange: string;
+  status: TickerRowStatus;
+  newsEnabled: boolean;
+  filingsEnabled: boolean;
+  jobStatus: TickerJobStatus;
+  lastSyncAt: string | null;
+  signalCount: number;
+}
+
+export interface TickerManagementResponse {
+  summary: TickerManagementSummary;
+  items: TickerManagementItem[];
+}
+
 export interface Topic {
   id: string;
   name: string;
